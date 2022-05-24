@@ -42,6 +42,8 @@ public:
     void begin();
     void setPanTimeOn(int value);
     void setTiltTimeOn(int value);
+    void setInitialPanPosition();
+    void setInitialTiltPosition();
     void incrementPanTimeOn(int step);
     void incrementTiltTimeOn(int step);
     int getPanTimeOn();

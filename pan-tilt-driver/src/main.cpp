@@ -22,7 +22,9 @@ void setup()
   Serial.setTimeout(SERIAL_TIMEOUT);
   
   cameraSupport.begin();
-  
+  cameraSupport.setInitialPanPosition();
+  cameraSupport.setInitialTiltPosition();
+
   WAIT_FOR_SERIAL();
   
   DEBUG_MSG("Setup done!");
