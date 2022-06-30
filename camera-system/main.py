@@ -22,7 +22,7 @@ face_mesh = mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_con
 drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
 
 def main():
-    support_driver = sm.get_driver()
+    #support_driver = sm.get_driver()
 
     # Media Pipe Settings
     #holistic = mp_holistic.Holistic(min_detection_confidence=0.55, min_tracking_confidence=0.55)
@@ -144,7 +144,7 @@ def main():
             x_axis_distance = p1[0] - img_w//2
             y_axis_distance = p1[1] - img_h//2
 
-            sm.send_command(support_driver, x_axis_distance//10, y_axis_distance//4)
+            #sm.send_command(support_driver, x_axis_distance//10, y_axis_distance//4)
             #sm.send_command(support_driver, x_axis_distance//10, 0)
             
             if (DRAW_RULES is True):
