@@ -18,13 +18,50 @@ cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, HD_WIDTH)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HD_HEIGHT)
 
-def detect_face():
+def detect_head_pose():
     pass
 
 
-def main():
+def detect_face(image):
     with mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.95) as face_detection:
-        while cap.isOpened():
+        
+            image.flags.writeable = False
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            results = face_detection.process(image)
+
+            image.flags.writeable = True
+            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+
+            img_h, img_w, img_c = image.shape
+            face_3d = []
+            face_2d = []
+
+
+
+            if results.detections:
+                for detection in results.detections:
+                    left_eye = detection.location_data.relative_keypoints[0]
+                    right_eye = detection.location_data.relative_keypoints[1]
+                    nose = detection.location_data.relative_keypoints[2]
+                    mouth = detection.location_data.relative_keypoints[3]
+                    left_ear = detection.location_data.relative_keypoints[4]
+                    right_ear = detection.location_data.relative_keypoints[5]
+                    
+                    cv2.circle(image,(int(left_eye.x * img_w), int(left_eye.y * img_h)), 5, (0,255,0), -1)
+                    cv2.circle(image,(int(right_eye.x * img_w), int(right_eye.y * img_h)), 5, (0,255,0), -1)
+                    cv2.circle(image,(int(nose.x * img_w), int(nose.y * img_h)), 5, (0,255,0), -1)
+                    cv2.circle(image,(int(mouth.x * img_w), int(mouth.y * img_h)), 5, (0,255,0), -1)
+                    cv2.circle(image,(int(left_ear.x * img_w), int(left_ear.y * img_h)), 5, (0,255,0), -1)
+                    cv2.circle(image,(int(right_ear.x * img_w), int(right_ear.y * img_h)), 5, (0,255,0), -1)
+                    
+                    # mp_drawing.draw_detection(image, detection)
+    
+    return image
+            
+
+
+def main():
+    while cap.isOpened():
         
             start = time.time()
 
@@ -33,26 +70,15 @@ def main():
                 print("Ignoring empty camera frame.")
                 # If loading a video, use 'break' instead of 'continue'.
                 continue
-
-            # To improve performance, optionally mark the image as not writeable to
-            # pass by reference.
-            image.flags.writeable = False
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            results = face_detection.process(image)
-
-            # Draw the face detection annotations on the image.
-            image.flags.writeable = True
-            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-            if results.detections:
-                for detection in results.detections:
-                    mp_drawing.draw_detection(image, detection)
-        
+            
             end = time.time()
             totalTime = end - start
             fps = 1 / totalTime
+            image =  cv2.flip(image, 1)
             cv2.putText(image, f'FPS: {int(fps)}', (10,80), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,100,255), 2)
-        
-            # Flip the image horizontally for a selfie-view display.
+
+            image = detect_face(image)
+
             cv2.imshow('MediaPipe Face Detection', image)
             if cv2.waitKey(5) & 0xFF == 27:
                 break
