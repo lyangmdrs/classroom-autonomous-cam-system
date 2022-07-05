@@ -1,149 +1,116 @@
+import tkinter as tk
 import cv2
-import mediapipe as mp
-import numpy as np
+from multiprocessing import Process, Queue
+import PIL.Image, PIL.ImageTk
 import time
-import SerialCommunication as sm
 
+class GuiApplication:
 
-CAMERA_INDEX = 0
-HD_WIDTH = 1280
-HD_HEIGHT = 720
-DRAW_RULES = True
+    _WINDOW_NAME = "Classroom Autonomus Camera System"
+    _WIDTH = 800
+    _HEIGHT = 600
+    _WINDOW_GEOMETRY = str(_WIDTH) + "x" + str(_HEIGHT)
+    _WINDOW_UPDATE_DELAY = 15
 
-mp_face_mesh = mp.solutions.face_mesh
-face_mesh = mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_confidence=0.8)
-mp_drawing = mp.solutions.drawing_utils
-drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
+    _MAIN_FRAME_RESIZE_FACTOR = 0.25
+    _AUX_FRAME_RESIZE_FACTOR = 0.1
 
-cap = cv2.VideoCapture(0)
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, HD_WIDTH)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HD_HEIGHT)
+    def __init__(self, camera_index=0):
+        self.window = tk.Tk()
+        self.window.title(self._WINDOW_NAME)
+        self.camera_index = camera_index
 
-def main():
+        # open video source (by default this will try to open the computer webcam)
+        self.camera = FrameAcquisition(self.camera_index)
+        self.camera.open_camera()
 
-    while cap.isOpened():
-        success, image = cap.read()
+        # Create a canvas that can fit the above video source size
+        self.main_canvas = tk.Canvas(self.window, width=self.camera._FRAME_WIDTH * 0.5, height=self.camera._FRAME_HEIGHT * 0.5)
+        self.main_canvas.grid(row=0, column=1)
 
-        start = time.time()
+        self.face_canvas = tk.Canvas(self.window, width=self.camera._FRAME_WIDTH * 0.2, height=self.camera._FRAME_HEIGHT * 0.2)
+        self.face_canvas.grid(row=0, column=0)
 
-        # Flip the image horizontally for a later selfie-view display
-        # Also convert the color space from BGR to RGB
-        image = cv2.cvtColor(cv2.flip(image, 1), cv2.COLOR_BGR2RGB)
+        # After it is called once, the update method will be automatically called every delay milliseconds
+        self.delay = 15
+        self.update()
 
-        # To improve performance
-        image.flags.writeable = False
-        
-        # Get the result
-        results = face_mesh.process(image)
-        
-        # To improve performance
-        image.flags.writeable = True
-        
-        # Convert the color space from RGB to BGR
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        self.window.mainloop()
 
-        img_h, img_w, img_c = image.shape
-        face_3d = []
-        face_2d = []
+    def update(self):
+        # Get a frame from the video source
+        ret, frame = self.camera.get_frame()
 
-        if results.multi_face_landmarks:
-            for face_landmarks in results.multi_face_landmarks:
-                print("List:", len(face_landmarks.landmark))
-                for idx, lm in enumerate(face_landmarks.landmark):
-                    
-                    if idx == 33 or idx == 263 or idx == 1 or idx == 61 or idx == 291 or idx == 199:
-                        if idx == 1:
-                            nose_2d = (lm.x * img_w, lm.y * img_h)
-                            nose_3d = (lm.x * img_w, lm.y * img_h, lm.z * 3000)
-
-                        x, y = int(lm.x * img_w), int(lm.y * img_h)
-
-                        # Get the 2D Coordinates
-                        face_2d.append([x, y])
-
-                        # Get the 3D Coordinates
-                        face_3d.append([x, y, lm.z])       
-                
-                # Convert it to the NumPy array
-                face_2d = np.array(face_2d, dtype=np.float64)
-
-                # Convert it to the NumPy array
-                face_3d = np.array(face_3d, dtype=np.float64)
-
-                # The camera matrix
-                focal_length = 1 * img_w
-
-                cam_matrix = np.array([ [focal_length, 0, img_h / 2],
-                                        [0, focal_length, img_w / 2],
-                                        [0, 0, 1]])
-
-                # The distortion parameters
-                dist_matrix = np.zeros((4, 1), dtype=np.float64)
-
-                # Solve PnP
-                success, rot_vec, trans_vec = cv2.solvePnP(face_3d, face_2d, cam_matrix, dist_matrix)
-
-                # Get rotational matrix
-                rmat, jac = cv2.Rodrigues(rot_vec)
-
-                # Get angles
-                angles, mtxR, mtxQ, Qx, Qy, Qz = cv2.RQDecomp3x3(rmat)
-
-                # Get the y rotation degree
-                x = angles[0] * 360
-                y = angles[1] * 360
-                z = angles[2] * 360
+        if ret:
+            main_canva_frame = cv2.resize(frame, (int(self.camera._FRAME_WIDTH * 0.5), int(self.camera._FRAME_HEIGHT * 0.5)))
+            self.main_canva_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(main_canva_frame))
+            self.main_canvas.create_image(0, 0, image = self.main_canva_frame, anchor = tk.NW)
             
+            face_canva_frame = cv2.resize(frame, (int(self.camera._FRAME_WIDTH * 0.2), int(self.camera._FRAME_HEIGHT * 0.2)))
+            self.face_canva_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(face_canva_frame))
+            self.face_canvas.create_image(0, 0, image = self.face_canva_frame, anchor = tk.NW)
 
-                # See where the user's head tilting
-                if y < -10:
-                    text = "Looking Left"
-                elif y > 10:
-                    text = "Looking Right"
-                elif x < -10:
-                    text = "Looking Down"
-                elif x > 10:
-                    text = "Looking Up"
-                else:
-                    text = "Forward"
-
-                # Display the nose direction
-                nose_3d_projection, jacobian = cv2.projectPoints(nose_3d, rot_vec, trans_vec, cam_matrix, dist_matrix)
-
-                p1 = (int(nose_2d[0]), int(nose_2d[1]))
-                p2 = (int(nose_2d[0] + y * 10) , int(nose_2d[1] - x * 10))
-                
-                cv2.line(image, p1, p2, (255, 0, 0), 3)
-
-                # Add the text on the image
-                # cv2.putText(image, text, (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 2)
-                # cv2.putText(image, "x: " + str(np.round(x,2)), (500, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-                # cv2.putText(image, "y: " + str(np.round(y,2)), (500, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-                # cv2.putText(image, "z: " + str(np.round(z,2)), (500, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        self.window.after(self.delay, self.update)
 
 
-            end = time.time()
-            totalTime = end - start
-            fps = -1
-            if totalTime > 1:
-                fps = 1 / totalTime
-                #print("FPS: ", fps)
+class FrameAcquisition:
 
-            cv2.putText(image, f'FPS: {int(fps)}', (20,450), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0,255,0), 2)
+    _FRAME_WIDTH = 1280
+    _FRAME_HEIGHT = 720
 
-            # mp_drawing.draw_landmarks(
-            #             image=image,
-            #             landmark_list=face_landmarks,
-            #             connections=mp_face_mesh.FACEMESH_TESSELATION,
-            #             landmark_drawing_spec=drawing_spec,
-            #             connection_drawing_spec=drawing_spec)
+    def __init__(self, camera_index=0):
+        
+        self.camera = cv2.VideoCapture()
+        self.camera_index = camera_index
+
+    def open_camera(self):
+        
+        self.camera.open(self.camera_index)
+        
+        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self._FRAME_WIDTH)
+        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self._FRAME_HEIGHT)
+        
+        self.width = self.camera.get(cv2.CAP_PROP_FRAME_WIDTH)
+        self.height = self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
 
-        cv2.imshow('Head Pose Estimation', image)
+    def get_frame(self):
+        if self.camera.isOpened():
+            ret, frame = self.camera.read()
+            if ret:
+                # Return a boolean success flag and the current frame converted to BGR
+                return (ret, cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            else:
+                return (ret, None)
+        else:
+            return (ret, None)
 
-        if cv2.waitKey(5) & 0xFF == 27:
-            break
-    cap.release()
+    # Release the video source when the object is destroyed
+    def __del__(self):
+        if self.camera.isOpened():
+            self.camera.release()
 
-if __name__ == "__main__":
-    main()
+
+class FrameProcessing:
+
+    def __init__(self) -> None:
+        pass
+
+
+class FrameServer:
+
+    def __init__(self) -> None:
+        pass
+
+
+class ProcessManager:
+
+    queue_frame_server_input = Queue()
+    queue_hand_gesture_recognition_input = Queue()
+    queue_head_pose_estimation_input = Queue()
+
+
+    def __init__(self) -> None:
+        pass
+
+GuiApplication()
