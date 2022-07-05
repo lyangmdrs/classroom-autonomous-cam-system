@@ -20,35 +20,38 @@ class GuiApplication:
         self.window.title(self._WINDOW_NAME)
         self.camera_index = camera_index
 
-        # open video source (by default this will try to open the computer webcam)
         self.camera = FrameAcquisition(self.camera_index)
         self.camera.open_camera()
 
-        # Create a canvas that can fit the above video source size
         self.main_canvas = tk.Canvas(self.window, width=self.camera._FRAME_WIDTH * 0.5, height=self.camera._FRAME_HEIGHT * 0.5)
         self.main_canvas.grid(row=0, column=1)
 
         self.face_canvas = tk.Canvas(self.window, width=self.camera._FRAME_WIDTH * 0.2, height=self.camera._FRAME_HEIGHT * 0.2)
         self.face_canvas.grid(row=0, column=0)
 
-        # After it is called once, the update method will be automatically called every delay milliseconds
+        self.hand_canvas = tk.Canvas(self.window, width=self.camera._FRAME_WIDTH * 0.2, height=self.camera._FRAME_HEIGHT * 0.2)
+        self.hand_canvas.grid(row=1, column=0)
+
         self.delay = 15
         self.update()
 
         self.window.mainloop()
 
     def update(self):
-        # Get a frame from the video source
         ret, frame = self.camera.get_frame()
 
         if ret:
-            main_canva_frame = cv2.resize(frame, (int(self.camera._FRAME_WIDTH * 0.5), int(self.camera._FRAME_HEIGHT * 0.5)))
+            main_canva_frame = cv2.resize(frame, (int(self.camera._FRAME_WIDTH * 0.5), int(self.camera._FRAME_HEIGHT * 0.5)),  interpolation = cv2.INTER_AREA)
             self.main_canva_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(main_canva_frame))
             self.main_canvas.create_image(0, 0, image = self.main_canva_frame, anchor = tk.NW)
             
-            face_canva_frame = cv2.resize(frame, (int(self.camera._FRAME_WIDTH * 0.2), int(self.camera._FRAME_HEIGHT * 0.2)))
+            face_canva_frame = cv2.resize(frame, (int(self.camera._FRAME_WIDTH * 0.2), int(self.camera._FRAME_HEIGHT * 0.2)),  interpolation = cv2.INTER_AREA)
             self.face_canva_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(face_canva_frame))
             self.face_canvas.create_image(0, 0, image = self.face_canva_frame, anchor = tk.NW)
+            
+            hand_canva_frame = cv2.resize(frame, (int(self.camera._FRAME_WIDTH * 0.2), int(self.camera._FRAME_HEIGHT * 0.2)),  interpolation = cv2.INTER_AREA)
+            self.hand_canva_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(hand_canva_frame))
+            self.hand_canvas.create_image(0, 0, image = self.hand_canva_frame, anchor = tk.NW)
 
         self.window.after(self.delay, self.update)
 
@@ -78,14 +81,12 @@ class FrameAcquisition:
         if self.camera.isOpened():
             ret, frame = self.camera.read()
             if ret:
-                # Return a boolean success flag and the current frame converted to BGR
                 return (ret, cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             else:
                 return (ret, None)
         else:
             return (ret, None)
 
-    # Release the video source when the object is destroyed
     def __del__(self):
         if self.camera.isOpened():
             self.camera.release()
