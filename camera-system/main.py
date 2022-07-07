@@ -13,7 +13,7 @@ class GuiApplication:
     _WIDTH = 800
     _HEIGHT = 600
     _WINDOW_GEOMETRY = str(_WIDTH) + "x" + str(_HEIGHT)
-    _WINDOW_UPDATE_DELAY = 15
+    _WINDOW_UPDATE_DELAY = 5
 
     _MAIN_FRAME_RESIZE_FACTOR = 0.25
     _AUX_FRAME_RESIZE_FACTOR = 0.1
@@ -21,12 +21,19 @@ class GuiApplication:
     frame_width = 1280
     frame_height = 720
     frame_depth = 3
-    frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
+    
+    raw_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
+    head_pose_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
+    hand_pose_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
 
-    def __init__(self, queue):
+    def __init__(self, raw_frame_queue, head_pose_queue, hand_pose_queue):
         self.window = tk.Tk()
         self.window.title(self._WINDOW_NAME)
-        self.main_queue = queue
+
+        self.raw_frame_queue = raw_frame_queue
+        self.head_pose_queue = head_pose_queue
+        self.hand_pose_queue = hand_pose_queue
+
         self.main_canvas = tk.Canvas(self.window, width=self.frame_width * 0.5, height=self.frame_height * 0.5)
         self.main_canvas.grid(row=0, column=1)
 
@@ -36,24 +43,26 @@ class GuiApplication:
         self.hand_canvas = tk.Canvas(self.window, width=self.frame_width * 0.2, height=self.frame_height * 0.2)
         self.hand_canvas.grid(row=1, column=0)
 
-        self.delay = 15
+        self.delay = 1
         self.update()
 
         self.window.mainloop()
 
     def update(self):
 
-        self.frame = self.main_queue.get()
+        self.raw_frame = self.raw_frame_queue.get()
+        self.head_pose_frame = self.head_pose_queue.get()
+        self.hand_pose_frame = self.hand_pose_queue.get()
 
-        main_canva_frame = cv2.resize(self.frame, (int(self.frame_width * 0.5), int(self.frame_height * 0.5)),  interpolation = cv2.INTER_AREA)
+        main_canva_frame = cv2.resize(self.raw_frame, (int(self.frame_width * 0.5), int(self.frame_height * 0.5)),  interpolation = cv2.INTER_AREA)
         self.main_canva_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(main_canva_frame))
         self.main_canvas.create_image(0, 0, image = self.main_canva_frame, anchor = tk.NW)
         
-        face_canva_frame = cv2.resize(self.frame, (int(self.frame_width * 0.2), int(self.frame_height * 0.2)),  interpolation = cv2.INTER_AREA)
+        face_canva_frame = cv2.resize(self.head_pose_frame, (int(self.frame_width * 0.2), int(self.frame_height * 0.2)),  interpolation = cv2.INTER_AREA)
         self.face_canva_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(face_canva_frame))
         self.face_canvas.create_image(0, 0, image = self.face_canva_frame, anchor = tk.NW)
         
-        hand_canva_frame = cv2.resize(self.frame, (int(self.frame_width * 0.2), int(self.frame_height * 0.2)),  interpolation = cv2.INTER_AREA)
+        hand_canva_frame = cv2.resize(self.hand_pose_frame, (int(self.frame_width * 0.2), int(self.frame_height * 0.2)),  interpolation = cv2.INTER_AREA)
         self.hand_canva_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(hand_canva_frame))
         self.hand_canvas.create_image(0, 0, image = self.hand_canva_frame, anchor = tk.NW)
 
@@ -124,14 +133,39 @@ def acquirer(queue):
         ret, frame = camera.get_frame()
         queue.put_nowait(frame)
 
+def frame_server(input_queue, output_queue, head_pose_queue, hand_gesture_queue):
+    frame_step = 5
+    frame_counter = 0
+    while True:
+        frame = input_queue.get()
+        output_queue.put(frame)
+        # frame_counter = (frame_counter + 1) % frame_step
+        if frame_counter == 0:
+            head_pose_queue.put(frame)
+            hand_gesture_queue.put(frame)
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-    frame_queue = Queue()
-    acquirer_process = Process(target=acquirer, args=(frame_queue,))
+
+    server_frame_input = Queue()
+    server_frame_output = Queue()
+    head_pose_queue = Queue()
+    hand_gesture_queue = Queue()
+
+    acquirer_process = Process(target=acquirer, args=(server_frame_input,))
     acquirer_process.start()
 
-    GuiApplication(frame_queue)
+    server_process = Process(target=frame_server, args=(server_frame_input, server_frame_output, 
+                                                        head_pose_queue, hand_gesture_queue,))
+    server_process.start()
+
+    GuiApplication(server_frame_output, head_pose_queue, hand_gesture_queue)
     print("fecha queue")
-    frame_queue.close()
+
+    server_frame_input.close()
+    server_frame_output.close()
+    head_pose_queue.close()
+    hand_gesture_queue.close()
+
     acquirer_process.terminate()
+    server_process.terminate()
