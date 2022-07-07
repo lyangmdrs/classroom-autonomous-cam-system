@@ -1,8 +1,11 @@
-import tkinter as tk
-import cv2
+import multiprocessing
 from multiprocessing import Process, Queue
 import PIL.Image, PIL.ImageTk
+import tkinter as tk
+import numpy as np
 import time
+import cv2
+
 
 class GuiApplication:
 
@@ -15,21 +18,22 @@ class GuiApplication:
     _MAIN_FRAME_RESIZE_FACTOR = 0.25
     _AUX_FRAME_RESIZE_FACTOR = 0.1
 
-    def __init__(self, camera_index=0):
+    frame_width = 1280
+    frame_height = 720
+    frame_depth = 3
+    frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
+
+    def __init__(self, queue):
         self.window = tk.Tk()
         self.window.title(self._WINDOW_NAME)
-        self.camera_index = camera_index
-
-        self.camera = FrameAcquisition(self.camera_index)
-        self.camera.open_camera()
-
-        self.main_canvas = tk.Canvas(self.window, width=self.camera._FRAME_WIDTH * 0.5, height=self.camera._FRAME_HEIGHT * 0.5)
+        self.main_queue = queue
+        self.main_canvas = tk.Canvas(self.window, width=self.frame_width * 0.5, height=self.frame_height * 0.5)
         self.main_canvas.grid(row=0, column=1)
 
-        self.face_canvas = tk.Canvas(self.window, width=self.camera._FRAME_WIDTH * 0.2, height=self.camera._FRAME_HEIGHT * 0.2)
+        self.face_canvas = tk.Canvas(self.window, width=self.frame_width * 0.2, height=self.frame_height * 0.2)
         self.face_canvas.grid(row=0, column=0)
 
-        self.hand_canvas = tk.Canvas(self.window, width=self.camera._FRAME_WIDTH * 0.2, height=self.camera._FRAME_HEIGHT * 0.2)
+        self.hand_canvas = tk.Canvas(self.window, width=self.frame_width * 0.2, height=self.frame_height * 0.2)
         self.hand_canvas.grid(row=1, column=0)
 
         self.delay = 15
@@ -38,20 +42,20 @@ class GuiApplication:
         self.window.mainloop()
 
     def update(self):
-        ret, frame = self.camera.get_frame()
 
-        if ret:
-            main_canva_frame = cv2.resize(frame, (int(self.camera._FRAME_WIDTH * 0.5), int(self.camera._FRAME_HEIGHT * 0.5)),  interpolation = cv2.INTER_AREA)
-            self.main_canva_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(main_canva_frame))
-            self.main_canvas.create_image(0, 0, image = self.main_canva_frame, anchor = tk.NW)
-            
-            face_canva_frame = cv2.resize(frame, (int(self.camera._FRAME_WIDTH * 0.2), int(self.camera._FRAME_HEIGHT * 0.2)),  interpolation = cv2.INTER_AREA)
-            self.face_canva_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(face_canva_frame))
-            self.face_canvas.create_image(0, 0, image = self.face_canva_frame, anchor = tk.NW)
-            
-            hand_canva_frame = cv2.resize(frame, (int(self.camera._FRAME_WIDTH * 0.2), int(self.camera._FRAME_HEIGHT * 0.2)),  interpolation = cv2.INTER_AREA)
-            self.hand_canva_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(hand_canva_frame))
-            self.hand_canvas.create_image(0, 0, image = self.hand_canva_frame, anchor = tk.NW)
+        self.frame = self.main_queue.get()
+
+        main_canva_frame = cv2.resize(self.frame, (int(self.frame_width * 0.5), int(self.frame_height * 0.5)),  interpolation = cv2.INTER_AREA)
+        self.main_canva_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(main_canva_frame))
+        self.main_canvas.create_image(0, 0, image = self.main_canva_frame, anchor = tk.NW)
+        
+        face_canva_frame = cv2.resize(self.frame, (int(self.frame_width * 0.2), int(self.frame_height * 0.2)),  interpolation = cv2.INTER_AREA)
+        self.face_canva_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(face_canva_frame))
+        self.face_canvas.create_image(0, 0, image = self.face_canva_frame, anchor = tk.NW)
+        
+        hand_canva_frame = cv2.resize(self.frame, (int(self.frame_width * 0.2), int(self.frame_height * 0.2)),  interpolation = cv2.INTER_AREA)
+        self.hand_canva_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(hand_canva_frame))
+        self.hand_canvas.create_image(0, 0, image = self.hand_canva_frame, anchor = tk.NW)
 
         self.window.after(self.delay, self.update)
 
@@ -67,7 +71,6 @@ class FrameAcquisition:
         self.camera_index = camera_index
 
     def open_camera(self):
-        
         self.camera.open(self.camera_index)
         
         self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self._FRAME_WIDTH)
@@ -75,7 +78,6 @@ class FrameAcquisition:
         
         self.width = self.camera.get(cv2.CAP_PROP_FRAME_WIDTH)
         self.height = self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT)
-
 
     def get_frame(self):
         if self.camera.isOpened():
@@ -114,4 +116,22 @@ class ProcessManager:
     def __init__(self) -> None:
         pass
 
-GuiApplication()
+def acquirer(queue):
+    camera = FrameAcquisition()
+    camera.open_camera()
+    frame = np.zeros((camera._FRAME_WIDTH, camera._FRAME_HEIGHT, 3), np.uint8)
+    while True:
+        ret, frame = camera.get_frame()
+        queue.put_nowait(frame)
+
+
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+    frame_queue = Queue()
+    acquirer_process = Process(target=acquirer, args=(frame_queue,))
+    acquirer_process.start()
+
+    GuiApplication(frame_queue)
+    print("fecha queue")
+    frame_queue.close()
+    acquirer_process.terminate()
