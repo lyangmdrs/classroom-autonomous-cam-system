@@ -1,3 +1,4 @@
+from ctypes import sizeof
 import multiprocessing
 from multiprocessing import Process, Queue
 import PIL.Image, PIL.ImageTk
@@ -117,13 +118,29 @@ class FrameServer:
 
 class ProcessManager:
 
-    queue_frame_server_input = Queue()
-    queue_hand_gesture_recognition_input = Queue()
-    queue_head_pose_estimation_input = Queue()
+    _ALL_QUEUES = []
+    
+    def __init__(self, queues_size):
+        self.queue_raw_frame_server_input = Queue(queues_size)
+        self.queue_raw_frame_server_output = Queue(queues_size)
+
+        self.queue_hand_gesture_recognition_input = Queue(queues_size)
+        self.queue_hand_gesture_recognition_output = Queue(queues_size)
+
+        self.queue_head_pose_estimation_input = Queue(queues_size)
+        self.queue_head_pose_estimation_output = Queue(queues_size)
+
+        self._ALL_QUEUES = [self.queue_raw_frame_server_input,
+                            self.queue_raw_frame_server_output,
+                            self.queue_hand_gesture_recognition_input,
+                            self.queue_hand_gesture_recognition_output,
+                            self.queue_head_pose_estimation_input,
+                            self.queue_head_pose_estimation_output,]
 
 
-    def __init__(self) -> None:
-        pass
+    def close_all_queues(self):
+        for q in self._ALL_QUEUES:
+            q.close()
 
 def acquirer(queue):
     camera = FrameAcquisition()
@@ -131,41 +148,48 @@ def acquirer(queue):
     frame = np.zeros((camera._FRAME_WIDTH, camera._FRAME_HEIGHT, 3), np.uint8)
     while True:
         ret, frame = camera.get_frame()
-        queue.put_nowait(frame)
+        try:
+            queue.put_nowait(frame)
+        except:
+            print("erro")
+            continue
 
 def frame_server(input_queue, output_queue, head_pose_queue, hand_gesture_queue):
-    frame_step = 5
-    frame_counter = 0
     while True:
         frame = input_queue.get()
-        output_queue.put(frame)
-        # frame_counter = (frame_counter + 1) % frame_step
-        if frame_counter == 0:
-            head_pose_queue.put(frame)
-            hand_gesture_queue.put(frame)
+        try:
+            output_queue.put_nowait(frame)
+            head_pose_queue.put_nowait(frame)
+            hand_gesture_queue.put_nowait(frame)
+        except:
+            continue
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+    
+    pm = ProcessManager(3)
 
-    server_frame_input = Queue()
-    server_frame_output = Queue()
-    head_pose_queue = Queue()
-    hand_gesture_queue = Queue()
+    # server_frame_input = Queue(3)
+    # server_frame_output = Queue(3)
+    # head_pose_queue = Queue(3)
+    # hand_gesture_queue = Queue(3)
 
-    acquirer_process = Process(target=acquirer, args=(server_frame_input,))
+    acquirer_process = Process(target=acquirer, args=(pm.queue_raw_frame_server_input,))
     acquirer_process.start()
 
-    server_process = Process(target=frame_server, args=(server_frame_input, server_frame_output, 
-                                                        head_pose_queue, hand_gesture_queue,))
+    server_process = Process(target=frame_server, args=(pm.queue_raw_frame_server_input, pm.queue_raw_frame_server_output, 
+                                                        pm.queue_head_pose_estimation_input, pm.queue_hand_gesture_recognition_input,))
     server_process.start()
 
-    GuiApplication(server_frame_output, head_pose_queue, hand_gesture_queue)
+    gui = GuiApplication(pm.queue_raw_frame_server_output, pm.queue_head_pose_estimation_input, pm.queue_hand_gesture_recognition_input)
     print("fecha queue")
 
-    server_frame_input.close()
-    server_frame_output.close()
-    head_pose_queue.close()
-    hand_gesture_queue.close()
+    # server_frame_input.close()
+    # server_frame_output.close()
+    # head_pose_queue.close()
+    # hand_gesture_queue.close()
+
+    pm.close_all_queues()
 
     acquirer_process.terminate()
     server_process.terminate()
