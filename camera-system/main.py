@@ -319,15 +319,14 @@ if __name__ == "__main__":
     
     pm = ProcessManager(5)
     fp = FrameProcessing()
-    frame_server = FrameServer(pm.queue_raw_frame_server_input, pm.queue_raw_frame_server_output,
+    frame_serveri = FrameServer(pm.queue_raw_frame_server_input, pm.queue_raw_frame_server_output,
                                pm.queue_hand_gesture_recognition_input, pm.queue_hand_gesture_recognition_output,
                                pm.queue_head_pose_estimation_input, pm.queue_head_pose_estimation_output)
 
     acquirer_process = Process(target=acquirer, args=(pm.queue_raw_frame_server_input,))
     acquirer_process.start()
 
-    server_process = Process(target=frame_server, args=(pm.queue_raw_frame_server_input, pm.queue_raw_frame_server_output, 
-                                                        pm.queue_head_pose_estimation_input, pm.queue_hand_gesture_recognition_input,))
+    server_process = Process(target=frame_serveri.start_server)
     server_process.start()
 
     head_estimation_process = Process(target=fp.head_pose_estimation, args=(pm.queue_head_pose_estimation_input, 
