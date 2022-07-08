@@ -235,9 +235,32 @@ class FrameProcessing:
             
 
 class FrameServer:
+    
+    def __init__(self, queue_raw_frame_server_input, queue_raw_frame_server_output, 
+                queue_hand_gesture_recognition_input, queue_hand_gesture_recognition_output, 
+                queue_head_pose_estimation_input, queue_head_pose_estimation_output,
+                frame_step=5):
 
-    def __init__(self) -> None:
-        pass
+        self.frame_step = frame_step
+        self.queue_raw_frame_server_input = queue_raw_frame_server_input
+        self.queue_raw_frame_server_output = queue_raw_frame_server_output
+        self.queue_hand_gesture_recognition_input = queue_hand_gesture_recognition_input
+        self.queue_hand_gesture_recognition_output = queue_hand_gesture_recognition_output
+        self.queue_head_pose_estimation_input = queue_head_pose_estimation_input
+        self.queue_head_pose_estimation_output = queue_head_pose_estimation_output
+    
+    def start_server(self):
+        frame_counter = 0
+        while True:
+            frame = self.queue_raw_frame_server_input.get()
+            try:
+                self.queue_raw_frame_server_output.put_nowait(frame)
+                frame_counter = (frame_counter + 1) % self.frame_step
+                if frame_counter == 0:
+                    self.queue_head_pose_estimation_input.put_nowait(frame)
+                    self.queue_hand_gesture_recognition_input.put_nowait(frame)
+            except:
+                continue
 
 
 class ProcessManager:
@@ -275,7 +298,6 @@ def acquirer(queue):
         try:
             queue.put_nowait(frame)
         except:
-            print("erro")
             continue
 
 def frame_server(input_queue, output_queue, head_pose_queue, hand_gesture_queue):
@@ -297,6 +319,9 @@ if __name__ == "__main__":
     
     pm = ProcessManager(5)
     fp = FrameProcessing()
+    frame_server = FrameServer(pm.queue_raw_frame_server_input, pm.queue_raw_frame_server_output,
+                               pm.queue_hand_gesture_recognition_input, pm.queue_hand_gesture_recognition_output,
+                               pm.queue_head_pose_estimation_input, pm.queue_head_pose_estimation_output)
 
     acquirer_process = Process(target=acquirer, args=(pm.queue_raw_frame_server_input,))
     acquirer_process.start()
