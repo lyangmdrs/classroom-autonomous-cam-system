@@ -35,14 +35,29 @@ class GuiApplication:
         self.head_pose_queue = head_pose_queue
         self.hand_pose_queue = hand_pose_queue
 
-        self.main_canvas = tk.Canvas(self.window, width=self.frame_width * 0.5, height=self.frame_height * 0.5)
-        self.main_canvas.grid(row=0, column=1)
+        self.main_viewer_frame = tk.Frame(self.window, width=self.frame_width * 0.6, height=self.frame_height * 0.6)
+        self.main_viewer_frame.pack(side=tk.RIGHT)
 
-        self.face_canvas = tk.Canvas(self.window, width=self.frame_width * 0.2, height=self.frame_height * 0.2)
-        self.face_canvas.grid(row=0, column=0)
+        self.debug_viewer_frame = tk.Frame(self.window, height=self.frame_height * 0.4)
+        self.debug_viewer_frame.pack(side=tk.LEFT)
+        
+        self.main_canvas = tk.Canvas(self.main_viewer_frame, width=self.frame_width * 0.5, height=self.frame_height * 0.5)
+        self.main_canvas.pack(side=tk.TOP)
 
-        self.hand_canvas = tk.Canvas(self.window, width=self.frame_width * 0.2, height=self.frame_height * 0.2)
-        self.hand_canvas.grid(row=1, column=0)
+        self.main_stream_label = tk.Label(self.main_viewer_frame, text="Input")
+        self.main_stream_label.pack(side=tk.BOTTOM)
+
+        self.face_canvas = tk.Canvas(self.debug_viewer_frame, width=self.frame_width * 0.2, height=self.frame_height * 0.2)
+        self.face_canvas.pack(side=tk.TOP)
+
+        self.main_stream_label = tk.Label(self.debug_viewer_frame, text="Head Pose Estimation")
+        self.main_stream_label.pack(side=tk.TOP)
+
+        self.hand_canvas = tk.Canvas(self.debug_viewer_frame, width=self.frame_width * 0.2, height=self.frame_height * 0.2)
+        self.hand_canvas.pack(side=tk.TOP)
+
+        self.main_stream_label = tk.Label(self.debug_viewer_frame, text="Hand Gesture Recognition")
+        self.main_stream_label.pack(side=tk.TOP)
 
         self.delay = 1
         self.update()
