@@ -51,9 +51,18 @@ class GuiApplication:
 
     def update(self):
 
-        self.raw_frame = self.raw_frame_queue.get()
-        self.head_pose_frame = self.head_pose_queue.get()
-        self.hand_pose_frame = self.hand_pose_queue.get()
+        try:
+            self.raw_frame = self.raw_frame_queue.get_nowait()
+        except:
+            pass
+        try:
+            self.head_pose_frame = self.head_pose_queue.get_nowait()
+        except:
+            pass
+        try:
+            self.hand_pose_frame = self.hand_pose_queue.get_nowait()
+        except:
+            pass
 
         main_canva_frame = cv2.resize(self.raw_frame, (int(self.frame_width * 0.5), int(self.frame_height * 0.5)),  interpolation = cv2.INTER_AREA)
         self.main_canva_frame = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(main_canva_frame))
@@ -106,8 +115,21 @@ class FrameAcquisition:
 
 class FrameProcessing:
 
-    def __init__(self) -> None:
+    def __init__(self):
         pass
+
+    def head_pose_estimation(self, queue_input, queue_output):
+        while True:
+            input_frame = queue_input.get()
+            output_frame = cv2.cvtColor(input_frame, cv2.COLOR_RGB2GRAY)
+            queue_output.put(output_frame)
+
+    def hand_gesture_recognition(self, queue_input, queue_output):
+        while True:
+            input_frame = queue_input.get()
+            output_frame = cv2.cvtColor(input_frame, cv2.COLOR_RGB2BGR)
+            queue_output.put(output_frame)
+            
 
 
 class FrameServer:
@@ -167,12 +189,8 @@ def frame_server(input_queue, output_queue, head_pose_queue, hand_gesture_queue)
 if __name__ == "__main__":
     multiprocessing.freeze_support()
     
-    pm = ProcessManager(3)
-
-    # server_frame_input = Queue(3)
-    # server_frame_output = Queue(3)
-    # head_pose_queue = Queue(3)
-    # hand_gesture_queue = Queue(3)
+    pm = ProcessManager(5)
+    fp = FrameProcessing()
 
     acquirer_process = Process(target=acquirer, args=(pm.queue_raw_frame_server_input,))
     acquirer_process.start()
@@ -181,15 +199,20 @@ if __name__ == "__main__":
                                                         pm.queue_head_pose_estimation_input, pm.queue_hand_gesture_recognition_input,))
     server_process.start()
 
-    gui = GuiApplication(pm.queue_raw_frame_server_output, pm.queue_head_pose_estimation_input, pm.queue_hand_gesture_recognition_input)
-    print("fecha queue")
+    head_estimation_process = Process(target=fp.head_pose_estimation, args=(pm.queue_head_pose_estimation_input, 
+                                                                            pm.queue_head_pose_estimation_output,))
+    head_estimation_process.start()
 
-    # server_frame_input.close()
-    # server_frame_output.close()
-    # head_pose_queue.close()
-    # hand_gesture_queue.close()
+    hand_recognition_process = Process(target=fp.hand_gesture_recognition, args=(pm.queue_hand_gesture_recognition_input,
+                                                                                 pm.queue_hand_gesture_recognition_output))
+    hand_recognition_process.start()
+
+    gui = GuiApplication(pm.queue_raw_frame_server_output, pm.queue_head_pose_estimation_output, pm.queue_hand_gesture_recognition_output)
+    print("fecha queue")
 
     pm.close_all_queues()
 
     acquirer_process.terminate()
     server_process.terminate()
+    head_estimation_process.terminate()
+    hand_recognition_process.terminate()
