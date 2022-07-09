@@ -4,7 +4,6 @@ import PIL.Image, PIL.ImageTk
 import mediapipe as mp
 import tkinter as tk
 import numpy as np
-import time
 import cv2
 
 
@@ -123,6 +122,18 @@ class FrameAcquisition:
         else:
             return (ret, None)
 
+    def acquirer_worker(self, outuput_queue):
+        
+        frame = np.zeros((self._FRAME_WIDTH, self._FRAME_HEIGHT, 3), np.uint8)
+
+        while True:
+            ret, frame = self.get_frame()
+            try:
+                outuput_queue.put_nowait(frame)
+            except:
+                continue
+
+
     def __del__(self):
         if self.camera.isOpened():
             self.camera.release()
@@ -141,18 +152,13 @@ class FrameProcessing:
         with self.mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5) as holistic:
             while True:
                 input_frame = queue_input.get()
-                # input_frame.flags.writeable = False
-                # frame = cv2.resize(frame, (320, 240), interpolation = cv2.INTER_AREA)
                 results = holistic.process(input_frame)
-                # input_frame.flags.writeable = True
-                # frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
                 
                 img_h, img_w, img_c = input_frame.shape
                 face_3d = []
                 face_2d = []
 
                 if results.face_landmarks:
-                    # print(len(results.face_landmarks.landmark))
                     for idx, lm in enumerate(results.face_landmarks.landmark):
                         if idx == 33 or idx == 263 or idx == 1 or idx == 61 or idx == 291 or idx == 199:
                             if idx == 1:
@@ -160,39 +166,22 @@ class FrameProcessing:
                                 nose_3d = (lm.x * img_w, lm.y * img_h, lm.z * 3000)
                             
                             x, y = int(lm.x * img_w), int(lm.y * img_h)
-
-                            # Get the 2D Coordinates
                             face_2d.append([x, y])
-
-                            # Get the 3D Coordinates
                             face_3d.append([x, y, lm.z])       
                     
-                    # Convert it to the NumPy array
                     face_2d = np.array(face_2d, dtype=np.float64)
-
-                    # Convert it to the NumPy array
                     face_3d = np.array(face_3d, dtype=np.float64)
-
-                    # The camera matrix
                     focal_length = 1 * img_w
 
                     cam_matrix = np.array([ [focal_length, 0, img_h / 2],
                                             [0, focal_length, img_w / 2],
                                             [0, 0, 1]])
 
-                    # The distortion parameters
                     dist_matrix = np.zeros((4, 1), dtype=np.float64)
-
-                    # Solve PnP
                     success, rot_vec, trans_vec = cv2.solvePnP(face_3d, face_2d, cam_matrix, dist_matrix)
-
-                    # Get rotational matrix
                     rmat, jac = cv2.Rodrigues(rot_vec)
-
-                    # Get angles
                     angles, mtxR, mtxQ, Qx, Qy, Qz = cv2.RQDecomp3x3(rmat)
 
-                    # Get the y rotation degree
                     x = angles[0] * 360
                     y = angles[1] * 360
                     z = angles[2] * 360
@@ -210,7 +199,6 @@ class FrameProcessing:
                     # else:
                     #     text = "Forward"
 
-                    # Display the nose direction
                     nose_3d_projection, jacobian = cv2.projectPoints(nose_3d, rot_vec, trans_vec, cam_matrix, dist_matrix)
 
                     p1 = (int(nose_2d[0]), int(nose_2d[1]))
@@ -236,29 +224,24 @@ class FrameProcessing:
 
 class FrameServer:
     
-    def __init__(self, queue_raw_frame_server_input, queue_raw_frame_server_output, 
-                queue_hand_gesture_recognition_input, queue_hand_gesture_recognition_output, 
-                queue_head_pose_estimation_input, queue_head_pose_estimation_output,
-                frame_step=5):
+    def __init__(self, frame_step=5):
 
         self.frame_step = frame_step
-        self.queue_raw_frame_server_input = queue_raw_frame_server_input
-        self.queue_raw_frame_server_output = queue_raw_frame_server_output
-        self.queue_hand_gesture_recognition_input = queue_hand_gesture_recognition_input
-        self.queue_hand_gesture_recognition_output = queue_hand_gesture_recognition_output
-        self.queue_head_pose_estimation_input = queue_head_pose_estimation_input
-        self.queue_head_pose_estimation_output = queue_head_pose_estimation_output
     
-    def start_server(self):
+    def start_server(self, queue_raw_frame_server_input: Queue, 
+                     queue_raw_frame_server_output: Queue, 
+                     queue_head_pose_estimation_input: Queue, 
+                     queue_hand_gesture_recognition_input: Queue):
+
         frame_counter = 0
         while True:
-            frame = self.queue_raw_frame_server_input.get()
+            frame = queue_raw_frame_server_input.get()
             try:
-                self.queue_raw_frame_server_output.put_nowait(frame)
+                queue_raw_frame_server_output.put_nowait(frame)
                 frame_counter = (frame_counter + 1) % self.frame_step
                 if frame_counter == 0:
-                    self.queue_head_pose_estimation_input.put_nowait(frame)
-                    self.queue_hand_gesture_recognition_input.put_nowait(frame)
+                    queue_head_pose_estimation_input.put_nowait(frame)
+                    queue_hand_gesture_recognition_input.put_nowait(frame)
             except:
                 continue
 
@@ -267,7 +250,8 @@ class ProcessManager:
 
     _ALL_QUEUES = []
     
-    def __init__(self, queues_size):
+    def __init__(self, queues_size: int):
+
         self.queue_raw_frame_server_input = Queue(queues_size)
         self.queue_raw_frame_server_output = Queue(queues_size)
 
@@ -277,6 +261,12 @@ class ProcessManager:
         self.queue_head_pose_estimation_input = Queue(queues_size)
         self.queue_head_pose_estimation_output = Queue(queues_size)
 
+        self.server_process = Process()
+        self.acquirer_process = Process()
+        self.head_pose_estimation_process = Process()
+        self.hand_gesture_recognition_process = Process()
+
+
         self._ALL_QUEUES = [self.queue_raw_frame_server_input,
                             self.queue_raw_frame_server_output,
                             self.queue_hand_gesture_recognition_input,
@@ -284,64 +274,63 @@ class ProcessManager:
                             self.queue_head_pose_estimation_input,
                             self.queue_head_pose_estimation_output,]
 
+    def set_acquirer_process(self, acquirer_target):
+        self.acquirer_process = Process(target=acquirer_target, args=(self.queue_raw_frame_server_input,))
+
+    def set_frame_server_process(self, frame_server_target):
+        self.server_process = Process(target=frame_server_target, 
+                                      args=(self.queue_raw_frame_server_input,
+                                            self.queue_raw_frame_server_output,
+                                            self.queue_head_pose_estimation_input,
+                                            self.queue_hand_gesture_recognition_input,))
+    
+    def set_head_pose_estimation_process(self, head_pose_estimation_target):
+        self.head_pose_estimation_process = Process(target=head_pose_estimation_target,
+                                                    args=(self.queue_head_pose_estimation_input,
+                                                          self.queue_head_pose_estimation_output,))
+
+    def set_hand_gesture_recognition_process(self, hand_gesture_recognition_target):
+        self.hand_gesture_recognition_process = Process(target=hand_gesture_recognition_target,
+                                                        args=(self.queue_hand_gesture_recognition_input,
+                                                               self.queue_hand_gesture_recognition_output,))
 
     def close_all_queues(self):
         for q in self._ALL_QUEUES:
             q.close()
+    
+    def terminate_all_processes(self):
+        self.acquirer_process.terminate()
+        self.server_process.terminate()
+        self.head_pose_estimation_process.terminate()
+        self.hand_gesture_recognition_process.terminate()
 
-def acquirer(queue):
+def acquirer_proxy(queue):
     camera = FrameAcquisition()
     camera.open_camera()
-    frame = np.zeros((camera._FRAME_WIDTH, camera._FRAME_HEIGHT, 3), np.uint8)
-    while True:
-        ret, frame = camera.get_frame()
-        try:
-            queue.put_nowait(frame)
-        except:
-            continue
-
-def frame_server(input_queue, output_queue, head_pose_queue, hand_gesture_queue):
-    frame_stepping = 5
-    frame_counter = 0
-    while True:
-        frame = input_queue.get()
-        try:
-            output_queue.put_nowait(frame)
-            frame_counter = (frame_counter + 1) % frame_stepping
-            if frame_counter == 0:
-                head_pose_queue.put_nowait(frame)
-                hand_gesture_queue.put_nowait(frame)
-        except:
-            continue
+    camera.acquirer_worker(queue)
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
     
-    pm = ProcessManager(5)
-    fp = FrameProcessing()
-    frame_serveri = FrameServer(pm.queue_raw_frame_server_input, pm.queue_raw_frame_server_output,
-                               pm.queue_hand_gesture_recognition_input, pm.queue_hand_gesture_recognition_output,
-                               pm.queue_head_pose_estimation_input, pm.queue_head_pose_estimation_output)
+    frame_server = FrameServer(frame_step=10)
+    frame_processor = FrameProcessing()
+    process_manager = ProcessManager(5)
 
-    acquirer_process = Process(target=acquirer, args=(pm.queue_raw_frame_server_input,))
-    acquirer_process.start()
+    process_manager.set_acquirer_process(acquirer_proxy)
+    process_manager.acquirer_process.start()
+    
+    process_manager.set_frame_server_process(frame_server.start_server)
+    process_manager.server_process.start()
 
-    server_process = Process(target=frame_serveri.start_server)
-    server_process.start()
+    process_manager.set_head_pose_estimation_process(frame_processor.head_pose_estimation)
+    process_manager.head_pose_estimation_process.start()
+    
+    process_manager.set_hand_gesture_recognition_process(frame_processor.hand_gesture_recognition)
+    process_manager.hand_gesture_recognition_process.start()
 
-    head_estimation_process = Process(target=fp.head_pose_estimation, args=(pm.queue_head_pose_estimation_input, 
-                                                                            pm.queue_head_pose_estimation_output,))
-    head_estimation_process.start()
+    gui = GuiApplication(process_manager.queue_raw_frame_server_output, 
+                         process_manager.queue_head_pose_estimation_output, 
+                         process_manager.queue_hand_gesture_recognition_output)
 
-    hand_recognition_process = Process(target=fp.hand_gesture_recognition, args=(pm.queue_hand_gesture_recognition_input,
-                                                                                 pm.queue_hand_gesture_recognition_output))
-    hand_recognition_process.start()
-
-    gui = GuiApplication(pm.queue_raw_frame_server_output, pm.queue_head_pose_estimation_output, pm.queue_hand_gesture_recognition_output)
-
-    pm.close_all_queues()
-
-    acquirer_process.terminate()
-    server_process.terminate()
-    head_estimation_process.terminate()
-    hand_recognition_process.terminate()
+    process_manager.close_all_queues()
+    process_manager.terminate_all_processes()
