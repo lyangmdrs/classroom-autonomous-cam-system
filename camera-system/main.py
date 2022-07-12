@@ -238,8 +238,10 @@ class FrameProcessing:
     def hand_gesture_recognition(self, queue_input, queue_output):
         """Recognizes hand gestures that eventually appear in frames received
         by the input queue, draws landmakrs and the nose direction vector.
-        At the end, it attaches the edited frame to the output queue."""
+        At the end, it attaches the edited frame to the output queue.
 
+        NOT IMPLEMENTED"""
+        #TODO: implement this function.
         while True:
             input_frame = queue_input.get()
             output_frame = cv2.cvtColor(input_frame, cv2.COLOR_RGB2BGR)
