@@ -15,3 +15,11 @@ To execute the commands browse to the directory ***classroom-autonomous-cam-syst
 - Load the source code to the board: ```pio run --target uno```
 - Open a serial monitor: ```pio device monitor```
 - Run tests: ```pio test -e uno```
+
+### Class Execution
+
+The projet is developed for Windows 10, with Python 3.8.
+To run the project following the instructions in this document, it is necessary to install ```make``` on Windows 10.
+
+- Install the requires python modules: ```make install```
+- Run the Classroom Autonomis Camera System: ```make run```
