@@ -318,7 +318,7 @@ class ProcessManager:
                                                                self.queue_hand_gesture_recognition_output,))
 
     def close_all_queues(self):
-        for q in self._ALL_QUEUES:
+        for q in self._all_queues_:
             q.close()
     
     def terminate_all_processes(self):
