@@ -140,10 +140,8 @@ class FrameAcquisition:
             ret, frame = self.camera.read()
             if ret:
                 return (ret, cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            else:
-                return (ret, None)
-        else:
-            return (ret, None)
+
+        return (None, None)
 
     def acquirer_worker(self, outuput_queue):
         """Loop for acquiring frames and filling the queue of frames received as a parameter."""
@@ -166,6 +164,7 @@ class FrameAcquisition:
 
 class FrameProcessing:
     """Class to group frame processing methods."""
+
     mp_holistic = mp.solutions.holistic
     mp_drawing = mp.solutions.drawing_utils
     mp_drawing_styles = mp.solutions.drawing_styles
@@ -346,6 +345,7 @@ class ProcessManager:
         self.head_pose_estimation_process.terminate()
         self.hand_gesture_recognition_process.terminate()
 
+
 def acquirer_proxy(frames_queue):
     """Proxy function for creating the frame acquisition process. If a proxy
     function is not used for this process the pickle module raises an exception
@@ -354,6 +354,7 @@ def acquirer_proxy(frames_queue):
     camera = FrameAcquisition()
     camera.open_camera()
     camera.acquirer_worker(frames_queue)
+
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
