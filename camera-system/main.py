@@ -153,7 +153,7 @@ class FrameAcquisition:
             _, frame = self.get_frame()
             try:
                 outuput_queue.put_nowait(frame)
-            except queue.Empty:
+            except queue.Full:
                 continue
 
 
@@ -271,7 +271,7 @@ class FrameServer:
                 if frame_counter == 0:
                     queue_head_pose_estimation_input.put_nowait(frame)
                     queue_hand_gesture_recognition_input.put_nowait(frame)
-            except queue.Empty:
+            except queue.Full:
                 continue
 
 
@@ -363,7 +363,7 @@ if __name__ == '__main__':
 
     frame_server = FrameServer(frame_step=10)
     frame_processor = FrameProcessing()
-    process_manager = ProcessManager(5)
+    process_manager = ProcessManager(3)
 
     process_manager.set_acquirer_process(acquirer_proxy)
     process_manager.acquirer_process.start()
