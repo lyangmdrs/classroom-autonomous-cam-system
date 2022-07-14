@@ -1,13 +1,17 @@
 """Main module for Classroom Autonomus Camera System."""
 import multiprocessing
-from multiprocessing import Process, Queue
+from multiprocessing import Lock, Process, Queue
 import tkinter as tk
 import queue
 import PIL.Image
 import PIL.ImageTk
 import mediapipe as mp
 import numpy as np
+import time
 import cv2
+import win32pipe
+import win32file
+import pywintypes
 
 
 class GuiApplication:
@@ -172,6 +176,21 @@ class FrameProcessing:
     def __init__(self):
         pass
 
+    def connect_head_pose_pipe(self):
+        """Waits for pipe connection."""
+
+        self.head_pose_pipe = win32pipe.CreateNamedPipe(r'\\.\pipe\Serial',
+                                                        win32pipe.PIPE_ACCESS_DUPLEX,
+                                                        win32pipe.PIPE_TYPE_MESSAGE |
+                                                        win32pipe.PIPE_READMODE_MESSAGE |
+                                                        win32pipe.PIPE_WAIT,
+                                                        1, 65536, 65536, 0, None)
+        print("Pipe Criado!")
+        win32pipe.ConnectNamedPipe(self.head_pose_pipe, None)
+        print("Pipe Connectado!")
+        time.sleep(5)
+        win32file.CloseHandle(self.head_pose_pipe)
+
     def head_pose_estimation(self, queue_input, queue_output):
         """Estimates the position of one of the people's head that eventually
         appears in the frames received by the input queue, draws the landmakrs
@@ -234,7 +253,6 @@ class FrameProcessing:
                                                .get_default_face_mesh_tesselation_style())
                 queue_output.put(input_frame)
 
-
     def hand_gesture_recognition(self, queue_input, queue_output):
         """Recognizes hand gestures that eventually appear in frames received
         by the input queue, draws landmakrs and the nose direction vector.
@@ -295,7 +313,7 @@ class ProcessManager:
         self.acquirer_process = Process()
         self.head_pose_estimation_process = Process()
         self.hand_gesture_recognition_process = Process()
-
+        self.head_pose_pipe_connection_process = Process()
 
         self._all_queues_ = [self.queue_raw_frame_server_input,
                             self.queue_raw_frame_server_output,
@@ -333,6 +351,11 @@ class ProcessManager:
                                                     args=(self.queue_hand_gesture_recognition_input,
                                                     self.queue_hand_gesture_recognition_output,))
 
+    def set_head_pose_pipe_connection_process(self, head_pose_pipe_connection_target):
+        """Configures the head pose pipe connection process for manual gesture recognition."""
+
+        self.head_pose_pipe_connection_process = Process(target=head_pose_pipe_connection_target)
+
     def close_all_queues(self):
         """Terminates all frame queues used in processes."""
 
@@ -357,9 +380,35 @@ def acquirer_proxy(frames_queue):
     camera.open_camera()
     camera.acquirer_worker(frames_queue)
 
+def pipe_client(lock):
+    """Head Pose pipe test"""
+
+    quit_pipe = False
+
+    while not quit_pipe:
+        try:
+            handle = win32file.CreateFile(r'\\.\pipe\Serial',
+                                        win32file.GENERIC_READ |
+                                        win32file.GENERIC_WRITE,
+                                        0, None, 
+                                        win32file.OPEN_EXISTING,
+                                        0, None)
+
+            resp = win32file.ReadFile(handle, 64*1024)
+
+        except pywintypes.error as error:
+            if error.args[0] == 2:
+                print("no pipe, trying again in a sec")
+                time.sleep(1)
+            elif error.args[0] == 109:
+                print("broken pipe")
+                quit_pipe = True
+
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
+
+    locker = Lock()
 
     frame_server = FrameServer(frame_step=10)
     frame_processor = FrameProcessing()
@@ -371,11 +420,16 @@ if __name__ == '__main__':
     process_manager.set_frame_server_process(frame_server.start_server)
     process_manager.server_process.start()
 
+    process_manager.set_head_pose_pipe_connection_process(frame_processor.connect_head_pose_pipe)
+    process_manager.head_pose_pipe_connection_process.start()
+
     process_manager.set_head_pose_estimation_process(frame_processor.head_pose_estimation)
     process_manager.head_pose_estimation_process.start()
 
     process_manager.set_hand_gesture_recognition_process(frame_processor.hand_gesture_recognition)
     process_manager.hand_gesture_recognition_process.start()
+
+    pipe_client(locker)
 
     gui = GuiApplication(process_manager.queue_raw_frame_server_output,
                          process_manager.queue_head_pose_estimation_output,
