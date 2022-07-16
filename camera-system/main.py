@@ -1,6 +1,6 @@
 """Main module for Classroom Autonomus Camera System."""
 import multiprocessing
-from multiprocessing import Lock, Process, Queue
+from multiprocessing import Pipe, Process, Queue
 import tkinter as tk
 import queue
 import time
@@ -173,65 +173,10 @@ class FrameProcessing:
     mp_drawing = mp.solutions.drawing_utils
     mp_drawing_styles = mp.solutions.drawing_styles
 
-    def __init__(self, head_pose_pipe_name, lock):
-        self.head_pose_pipe_name = head_pose_pipe_name
-        self.lock = lock
+    def __init__(self):
+        pass
 
-    def connect_head_pose_pipe(self):
-        """Waits for pipe connection."""
-
-        self.lock.acquire()
-        try:
-            print("Server started!")
-        finally:
-            self.lock.release()
-
-        count = 0
-        pipe = win32pipe.CreateNamedPipe(self.head_pose_pipe_name,
-                                         win32pipe.PIPE_ACCESS_DUPLEX,
-                                         win32pipe.PIPE_TYPE_MESSAGE |
-                                         win32pipe.PIPE_READMODE_MESSAGE |
-                                         win32pipe.PIPE_WAIT,
-                                         1, 65536, 65536,
-                                         0,
-                                         None)
-        try:
-            self.lock.acquire()
-            try:
-                print("waiting for client")
-            finally:
-                self.lock.release()
-
-            win32pipe.ConnectNamedPipe(pipe, None)
-
-            self.lock.acquire()
-            try:
-                print("got client")
-            finally:
-                self.lock.release()
-
-            while count < 10:
-
-                self.lock.acquire()
-                try:
-                    print(f"writing message {count}")
-                finally:
-                    self.lock.release()
-                # convert to bytes
-                some_data = str.encode(f"{count}")
-                win32file.WriteFile(pipe, some_data)
-                time.sleep(1)
-                count += 1
-
-            self.lock.acquire()
-            try:
-                print("finished now")
-            finally:
-                self.lock.release()
-        finally:
-            win32file.CloseHandle(pipe)
-
-    def head_pose_estimation(self, queue_input, queue_output):
+    def head_pose_estimation(self, queue_input, queue_output, pipe_connection):
         """Estimates the position of one of the people's head that eventually
         appears in the frames received by the input queue, draws the landmakrs
         and the nose direction vector. At the end it appends the edited frame
@@ -278,6 +223,9 @@ class FrameProcessing:
                     x_coordenate = angles[0] * 360
                     y_coordenate = angles[1] * 360
                     _ = angles[2] * 360
+
+                    if not pipe_connection.poll():
+                        pipe_connection.send((y_coordenate, nose_2d))
 
                     point1 = (int(nose_2d[0]), int(nose_2d[1]))
                     point2 = (int(nose_2d[0] + y_coordenate * 10),
@@ -355,6 +303,8 @@ class ProcessManager:
         self.hand_gesture_recognition_process = Process()
         self.head_pose_pipe_connection_process = Process()
 
+        self.recv_connection, self.send_connection = Pipe()
+
         self._all_queues_ = [self.queue_raw_frame_server_input,
                             self.queue_raw_frame_server_output,
                             self.queue_hand_gesture_recognition_input,
@@ -382,7 +332,8 @@ class ProcessManager:
 
         self.head_pose_estimation_process = Process(target=head_pose_estimation_target,
                                                     args=(self.queue_head_pose_estimation_input,
-                                                          self.queue_head_pose_estimation_output,))
+                                                          self.queue_head_pose_estimation_output,
+                                                          self.send_connection,))
 
     def set_hand_gesture_recognition_process(self, hand_gesture_recognition_target):
         """Configures the frame processing process for manual gesture recognition."""
@@ -409,6 +360,11 @@ class ProcessManager:
         self.server_process.terminate()
         self.head_pose_estimation_process.terminate()
         self.hand_gesture_recognition_process.terminate()
+    
+    def close_all_pipes(self):
+        """Closes all pipes."""
+        self.recv_connection.close()
+        self.send_connection.close()
 
 
 def acquirer_proxy(frames_queue):
@@ -420,111 +376,20 @@ def acquirer_proxy(frames_queue):
     camera.open_camera()
     camera.acquirer_worker(frames_queue)
 
-def pipe_client(lock):
-    """Head Pose pipe test"""
 
-    lock.acquire()
-    try:
-        print("pipe client")
-    finally:
-        lock.release()
+def pipe_receiver(pipe_connection):
+    """Pipe Receiver"""
+    while True:
+        time.sleep(3)
+        received = pipe_connection.recv()
+        print(f"Received: {received}")
 
-    quit_client = False
-
-    while not quit_client:
-        try:
-            handle = win32file.CreateFile(r'\\.\pipe\Serial',
-                                          win32file.GENERIC_READ | win32file.GENERIC_WRITE,
-                                          0,
-                                          None,
-                                          win32file.OPEN_EXISTING,
-                                          0,
-                                          None)
-
-            res = win32pipe.SetNamedPipeHandleState(handle, win32pipe.PIPE_READMODE_MESSAGE, None, None)
-            if res == 0:
-
-                lock.acquire()
-                try:
-                    print(f"SetNamedPipeHandleState return code: {res}")
-                finally:
-                    lock.release()
-
-            while True:
-                resp = win32file.ReadFile(handle, 64*1024)
-                
-                lock.acquire()
-                try:
-                    print(f"message: {resp}")
-                finally:
-                    lock.release()
-
-        except pywintypes.error as error:
-            if error.args[0] == 2:
-                print("no pipe, trying again in a sec")
-                time.sleep(3)
-            elif error.args[0] == 109:
-                print("broken pipe, bye bye")
-                quit_client = True
-
-def pipe_server(lock):
-    """Server"""
-    lock.acquire()
-    try:
-        print("Server started!")
-    finally:
-        lock.release()
-
-    count = 0
-    pipe = win32pipe.CreateNamedPipe(r'\\.\pipe\Serial',
-                                    win32pipe.PIPE_ACCESS_DUPLEX,
-                                    win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT,
-                                    1, 65536, 65536,
-                                    0,
-                                    None)
-    try:
-        lock.acquire()
-        try:
-            print("waiting for client")
-        finally:
-            lock.release()
-
-        win32pipe.ConnectNamedPipe(pipe, None)
-
-        lock.acquire()
-        try:
-            print("got client")
-        finally:
-            lock.release()
-
-        while count < 10:
-
-            lock.acquire()
-            try:
-                print(f"writing message {count}")
-            finally:
-                lock.release()
-            # convert to bytes
-            some_data = str.encode(f"{count}")
-            win32file.WriteFile(pipe, some_data)
-            time.sleep(1)
-            count += 1
-
-        lock.acquire()
-        try:
-            print("finished now")
-        finally:
-            lock.release()
-    finally:
-        win32file.CloseHandle(pipe)
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
 
-    locker = Lock()
-
     frame_server = FrameServer(frame_step=10)
-    frame_processor = FrameProcessing(head_pose_pipe_name=r'\\.\pipe\Serial', lock=locker)
+    frame_processor = FrameProcessing()
     process_manager = ProcessManager(3)
 
     process_manager.set_acquirer_process(acquirer_proxy)
@@ -533,8 +398,8 @@ if __name__ == '__main__':
     process_manager.set_frame_server_process(frame_server.start_server)
     process_manager.server_process.start()
 
-    process_manager.set_head_pose_pipe_connection_process(frame_processor.connect_head_pose_pipe)
-    process_manager.head_pose_pipe_connection_process.start()
+    pipe_receiver_process = Process(target=pipe_receiver, args=(process_manager.recv_connection,))
+    pipe_receiver_process.start()
 
     process_manager.set_head_pose_estimation_process(frame_processor.head_pose_estimation)
     process_manager.head_pose_estimation_process.start()
@@ -542,15 +407,11 @@ if __name__ == '__main__':
     process_manager.set_hand_gesture_recognition_process(frame_processor.hand_gesture_recognition)
     process_manager.hand_gesture_recognition_process.start()
 
-    # pipe_server_process = Process(target=pipe_server, args=(locker,))
-    pipe_client_process = Process(target=pipe_client, args=(locker,))
-
-    # pipe_server_process.start()
-    pipe_client_process.start()
-
     gui = GuiApplication(process_manager.queue_raw_frame_server_output,
                          process_manager.queue_head_pose_estimation_output,
                          process_manager.queue_hand_gesture_recognition_output)
 
+    process_manager.close_all_pipes()
     process_manager.close_all_queues()
     process_manager.terminate_all_processes()
+    pipe_receiver_process.terminate()
