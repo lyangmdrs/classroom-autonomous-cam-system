@@ -12,7 +12,7 @@ import cv2
 import win32pipe
 import win32file
 import pywintypes
-
+import serial
 
 class GuiApplication:
     """Crates a graphic user interface."""
@@ -285,6 +285,7 @@ class ProcessManager:
     """Class that manages the processes of the autonomous camera system."""
 
     _all_queues_ = []
+    _all_processes_ = []
 
     def __init__(self, queues_size: int):
 
@@ -302,6 +303,7 @@ class ProcessManager:
         self.head_pose_estimation_process = Process()
         self.hand_gesture_recognition_process = Process()
         self.head_pose_pipe_connection_process = Process()
+        self.serial_communication_process = Process()
 
         self.recv_connection, self.send_connection = Pipe()
 
@@ -317,6 +319,7 @@ class ProcessManager:
 
         self.acquirer_process = Process(target=acquirer_target,
                                         args=(self.queue_raw_frame_server_input,))
+        self._all_processes_.append(self.acquirer_process)
 
     def set_frame_server_process(self, frame_server_target):
         """Configures the process for the frame server."""
@@ -326,6 +329,7 @@ class ProcessManager:
                                             self.queue_raw_frame_server_output,
                                             self.queue_head_pose_estimation_input,
                                             self.queue_hand_gesture_recognition_input,))
+        self._all_processes_.append(self.server_process)
 
     def set_head_pose_estimation_process(self, head_pose_estimation_target):
         """Configures the frame processing process for head pose estimation."""
@@ -334,6 +338,7 @@ class ProcessManager:
                                                     args=(self.queue_head_pose_estimation_input,
                                                           self.queue_head_pose_estimation_output,
                                                           self.send_connection,))
+        self._all_processes_.append(self.head_pose_estimation_process)
 
     def set_hand_gesture_recognition_process(self, hand_gesture_recognition_target):
         """Configures the frame processing process for manual gesture recognition."""
@@ -341,11 +346,19 @@ class ProcessManager:
         self.hand_gesture_recognition_process = Process(target=hand_gesture_recognition_target,
                                                     args=(self.queue_hand_gesture_recognition_input,
                                                     self.queue_hand_gesture_recognition_output,))
+        self._all_processes_.append(self.hand_gesture_recognition_process)
 
     def set_head_pose_pipe_connection_process(self, head_pose_pipe_connection_target):
         """Configures the head pose pipe connection process for manual gesture recognition."""
 
         self.head_pose_pipe_connection_process = Process(target=head_pose_pipe_connection_target)
+        self._all_processes_.append(self.head_pose_pipe_connection_process)
+
+    def set_serial_communication_process(self, serial_communication_target):
+        """Configures the serial communication process."""
+
+        self.serial_communication_process = Process(target=serial_communication_target)
+        self._all_processes_.append(self.serial_communication_process)
 
     def close_all_queues(self):
         """Terminates all frame queues used in processes."""
@@ -356,15 +369,55 @@ class ProcessManager:
     def terminate_all_processes(self):
         """Terminates all processes."""
 
-        self.acquirer_process.terminate()
-        self.server_process.terminate()
-        self.head_pose_estimation_process.terminate()
-        self.hand_gesture_recognition_process.terminate()
-    
+        for _process in self._all_processes_:
+            if _process.is_alive():
+                _process.terminate()
+
     def close_all_pipes(self):
         """Closes all pipes."""
         self.recv_connection.close()
         self.send_connection.close()
+
+
+class SerialMessenger:
+    """Class that manages serial communication."""
+
+    WAIT_SERIAL_CONNECTION = 2
+
+    def __init__(self):
+        self.driver = serial.Serial(port='COM3', baudrate=115200, timeout=.1)
+        time.sleep(self.WAIT_SERIAL_CONNECTION)
+
+    def string_padding(self, value):
+        """Add the correct number of zeros to the string to build a valid message."""
+        signal = "+"
+
+        if not value.isnumeric():
+            signal = value[0]
+            value = value[1:]
+
+        padding = '0' * (4 - len(value))
+
+        return signal + padding + value
+
+    def build_command_string(self, pan_value, tilt_value):
+        """Builds a valid string to command the Pan-Tilt driver."""
+        command_separator = "/"
+        command_terminator = "!"
+
+        str_pan_value = self.string_padding(str(pan_value))
+        str_tilt_value = self.string_padding(str(tilt_value))
+
+        return str_pan_value + command_separator + str_tilt_value + command_terminator
+
+    def serial_worker(self, pipe_connection):
+        """Sends the control data via serial"""
+
+        while True:
+            time.sleep(3)
+            pan = 50
+            tilt = 30
+            print(f"Command: {self.build_command_string(pan, tilt)}")
 
 
 def acquirer_proxy(frames_queue):
@@ -391,6 +444,10 @@ if __name__ == '__main__':
     frame_server = FrameServer(frame_step=10)
     frame_processor = FrameProcessing()
     process_manager = ProcessManager(3)
+    # serial_messeger = SerialMessenger()
+
+    # process_manager.set_serial_communication_process(serial_messeger.serial_worker)
+    # process_manager.serial_communication_process.start()
 
     process_manager.set_acquirer_process(acquirer_proxy)
     process_manager.acquirer_process.start()
