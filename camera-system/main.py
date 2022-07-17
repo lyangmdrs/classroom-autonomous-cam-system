@@ -357,7 +357,8 @@ class ProcessManager:
     def set_serial_communication_process(self, serial_communication_target):
         """Configures the serial communication process."""
 
-        self.serial_communication_process = Process(target=serial_communication_target)
+        self.serial_communication_process = Process(target=serial_communication_target,
+                                                    args=(self.recv_connection,))
         self._all_processes_.append(self.serial_communication_process)
 
     def close_all_queues(self):
@@ -385,11 +386,18 @@ class SerialMessenger:
     WAIT_SERIAL_CONNECTION = 2
 
     def __init__(self):
-        self.driver = serial.Serial(port='COM3', baudrate=115200, timeout=.1)
-        time.sleep(self.WAIT_SERIAL_CONNECTION)
+
+        try:
+            self.driver = serial.Serial(port='COM3', baudrate=115200, timeout=.1)
+        except serial.SerialException:
+            self.driver = None
+        else:
+            time.sleep(self.WAIT_SERIAL_CONNECTION)
+
 
     def string_padding(self, value):
         """Add the correct number of zeros to the string to build a valid message."""
+
         signal = "+"
 
         if not value.isnumeric():
@@ -402,6 +410,7 @@ class SerialMessenger:
 
     def build_command_string(self, pan_value, tilt_value):
         """Builds a valid string to command the Pan-Tilt driver."""
+
         command_separator = "/"
         command_terminator = "!"
 
@@ -414,9 +423,11 @@ class SerialMessenger:
         """Sends the control data via serial"""
 
         while True:
-            time.sleep(3)
+            time.sleep(0.5)
             pan = 50
             tilt = 30
+            received = pipe_connection.recv()
+            print(f"Dados: {received}")
             print(f"Command: {self.build_command_string(pan, tilt)}")
 
 
@@ -444,19 +455,16 @@ if __name__ == '__main__':
     frame_server = FrameServer(frame_step=10)
     frame_processor = FrameProcessing()
     process_manager = ProcessManager(3)
-    # serial_messeger = SerialMessenger()
+    serial_messeger = SerialMessenger()
 
-    # process_manager.set_serial_communication_process(serial_messeger.serial_worker)
-    # process_manager.serial_communication_process.start()
+    process_manager.set_serial_communication_process(serial_messeger.serial_worker)
+    process_manager.serial_communication_process.start()
 
     process_manager.set_acquirer_process(acquirer_proxy)
     process_manager.acquirer_process.start()
 
     process_manager.set_frame_server_process(frame_server.start_server)
     process_manager.server_process.start()
-
-    pipe_receiver_process = Process(target=pipe_receiver, args=(process_manager.recv_connection,))
-    pipe_receiver_process.start()
 
     process_manager.set_head_pose_estimation_process(frame_processor.head_pose_estimation)
     process_manager.head_pose_estimation_process.start()
@@ -471,4 +479,3 @@ if __name__ == '__main__':
     process_manager.close_all_pipes()
     process_manager.close_all_queues()
     process_manager.terminate_all_processes()
-    pipe_receiver_process.terminate()
