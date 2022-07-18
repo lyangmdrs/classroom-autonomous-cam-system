@@ -441,6 +441,12 @@ def acquirer_proxy(frames_queue):
     camera.acquirer_worker(frames_queue)
 
 
+def serial_messeger_worker(pipe_connection):
+    """Proxy function for serial communication."""
+
+    serial_messeger = SerialMessenger()
+    serial_messeger.serial_worker(pipe_connection)
+
 def pipe_receiver(pipe_connection):
     """Pipe Receiver"""
     while True:
@@ -455,9 +461,8 @@ if __name__ == '__main__':
     frame_server = FrameServer(frame_step=10)
     frame_processor = FrameProcessing()
     process_manager = ProcessManager(3)
-    serial_messeger = SerialMessenger()
 
-    process_manager.set_serial_communication_process(serial_messeger.serial_worker)
+    process_manager.set_serial_communication_process(serial_messeger_worker)
     process_manager.serial_communication_process.start()
 
     process_manager.set_acquirer_process(acquirer_proxy)
