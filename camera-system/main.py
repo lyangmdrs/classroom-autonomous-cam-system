@@ -384,6 +384,12 @@ class SerialMessenger:
     """Class that manages serial communication."""
 
     WAIT_SERIAL_CONNECTION = 2
+    HEAD_ANGLE_THRESHOLD = 10
+    MILISSECOND = 1/1e3
+    FRAME_HEIGHT = 720
+    FRAME_WIDTH = 1280
+    X_STEP = 10
+    Y_STEP = 3
 
     def __init__(self):
 
@@ -393,7 +399,7 @@ class SerialMessenger:
             self.driver = None
         else:
             time.sleep(self.WAIT_SERIAL_CONNECTION)
-
+            print("Serial Connected!")
 
     def string_padding(self, value):
         """Add the correct number of zeros to the string to build a valid message."""
@@ -419,16 +425,44 @@ class SerialMessenger:
 
         return str_pan_value + command_separator + str_tilt_value + command_terminator
 
+    def send_command_and_get_response(self, command):
+        """Sends the serial command via serial."""
+
+        self.driver.write(bytes(str(command), "utf-8"))
+        time.sleep(2.1 * self.MILISSECOND)
+
+        try:
+            response = (self.driver.readline()).decode()
+        except ValueError:
+            response = None
+        return response
+
+
+
     def serial_worker(self, pipe_connection):
-        """Sends the control data via serial"""
+        """Manages the serial communication."""
 
         while True:
-            time.sleep(0.5)
-            pan = 50
-            tilt = 30
-            received = pipe_connection.recv()
-            print(f"Dados: {received}")
-            print(f"Command: {self.build_command_string(pan, tilt)}")
+
+            head_angle, nose_coordinates = pipe_connection.recv()
+            x_distance = int(self.FRAME_WIDTH // 2 - nose_coordinates[0]) // self.X_STEP
+            y_distance = int(nose_coordinates[1] - self.FRAME_HEIGHT // 2) // self.Y_STEP
+            command = self.build_command_string(x_distance, y_distance)
+
+            text = "forward"
+            if head_angle < -self.HEAD_ANGLE_THRESHOLD:
+                text = "looking left"
+            elif head_angle > self.HEAD_ANGLE_THRESHOLD:
+                text = "looking right"
+
+            print(f"Head is {text}!")
+            print(f"Head angle: {head_angle}")
+            print(f"Command: {command}")
+
+            response = self.send_command_and_get_response(command)
+            
+            if response:
+                print(f"Response: {response}")
 
 
 def acquirer_proxy(frames_queue):
@@ -446,13 +480,6 @@ def serial_messeger_worker(pipe_connection):
 
     serial_messeger = SerialMessenger()
     serial_messeger.serial_worker(pipe_connection)
-
-def pipe_receiver(pipe_connection):
-    """Pipe Receiver"""
-    while True:
-        time.sleep(3)
-        received = pipe_connection.recv()
-        print(f"Received: {received}")
 
 
 if __name__ == '__main__':
