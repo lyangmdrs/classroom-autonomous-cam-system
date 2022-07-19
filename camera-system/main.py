@@ -130,7 +130,7 @@ class FrameAcquisition:
 
     def open_camera(self):
         """"Opens the acquisition device."""
-        self.camera.open(self.camera_index)
+        self.camera.open(self.camera_index, cv2.CAP_DSHOW)
 
         self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self._FRAME_WIDTH)
         self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self._FRAME_HEIGHT)
@@ -388,7 +388,7 @@ class SerialMessenger:
     MILISSECOND = 1/1e3
     FRAME_HEIGHT = 720
     FRAME_WIDTH = 1280
-    X_STEP = 10
+    X_STEP = 15
     Y_STEP = 3
 
     def __init__(self):
@@ -428,8 +428,12 @@ class SerialMessenger:
     def send_command_and_get_response(self, command):
         """Sends the serial command via serial."""
 
-        self.driver.write(bytes(str(command), "utf-8"))
-        time.sleep(2.1 * self.MILISSECOND)
+        response = None
+        try:
+            self.driver.write(bytes(str(command), "utf-8"))
+            time.sleep(2.1 * self.MILISSECOND)
+        except AttributeError:
+            return response
 
         try:
             response = (self.driver.readline()).decode()
@@ -447,9 +451,10 @@ class SerialMessenger:
             head_angle, nose_coordinates = pipe_connection.recv()
             x_distance = int(self.FRAME_WIDTH // 2 - nose_coordinates[0]) // self.X_STEP
             y_distance = int(nose_coordinates[1] - self.FRAME_HEIGHT // 2) // self.Y_STEP
-            command = self.build_command_string(x_distance, y_distance)
 
-            text = "forward"
+            command = self.build_command_string(0, x_distance)
+
+            text = "looking forward"
             if head_angle < -self.HEAD_ANGLE_THRESHOLD:
                 text = "looking left"
             elif head_angle > self.HEAD_ANGLE_THRESHOLD:
@@ -459,8 +464,9 @@ class SerialMessenger:
             print(f"Head angle: {head_angle}")
             print(f"Command: {command}")
 
+            # command = self.build_command_string(0,0)
             response = self.send_command_and_get_response(command)
-            
+
             if response:
                 print(f"Response: {response}")
 
@@ -485,9 +491,9 @@ def serial_messeger_worker(pipe_connection):
 if __name__ == '__main__':
     multiprocessing.freeze_support()
 
-    frame_server = FrameServer(frame_step=10)
+    frame_server = FrameServer(frame_step=3)
     frame_processor = FrameProcessing()
-    process_manager = ProcessManager(3)
+    process_manager = ProcessManager(1)
 
     process_manager.set_serial_communication_process(serial_messeger_worker)
     process_manager.serial_communication_process.start()
