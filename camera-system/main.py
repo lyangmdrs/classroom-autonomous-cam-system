@@ -98,11 +98,8 @@ class GuiApplication:
         self.main_canva_frame = PIL.ImageTk.PhotoImage(image=PIL.Image.fromarray(main_canva_frame))
         self.main_canvas.create_image(0, 0, image=self.main_canva_frame, anchor = tk.NW)
 
-        face_canva_frame = cv2.resize(self.head_pose_frame,
-                                      (int(self.frame_width * 0.2),
-                                      int(self.frame_height * 0.2)),
-                                      interpolation = cv2.INTER_AREA)
-        self.face_canva_frame = PIL.ImageTk.PhotoImage(image=PIL.Image.fromarray(face_canva_frame))
+        heap_pose_frame = PIL.Image.fromarray(self.head_pose_frame)
+        self.face_canva_frame = PIL.ImageTk.PhotoImage(image=heap_pose_frame)
         self.face_canvas.create_image(0, 0, image=self.face_canva_frame, anchor = tk.NW)
 
         hand_canva_frame = cv2.resize(self.hand_pose_frame,
@@ -130,7 +127,7 @@ class FrameAcquisition:
 
     def open_camera(self):
         """"Opens the acquisition device."""
-        self.camera.open(self.camera_index)
+        self.camera.open(self.camera_index, cv2.CAP_DSHOW)
 
         self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self._FRAME_WIDTH)
         self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self._FRAME_HEIGHT)
@@ -258,6 +255,10 @@ class FrameServer:
     """Class that manages the distribution of frames between the
     different processes of the autonomous camera system."""
 
+    FRAME_RESIZE_FACTOR = 0.2
+    FRAME_WIDTH = 1280
+    FRAME_HEIGHT = 720
+
     def __init__(self, frame_step=5):
 
         self.frame_step = frame_step
@@ -274,8 +275,12 @@ class FrameServer:
             try:
                 queue_raw_frame_server_output.put_nowait(frame)
                 frame_counter = (frame_counter + 1) % self.frame_step
+                head_pose_estimation_frame = cv2.resize(frame,
+                                             (int(self.FRAME_WIDTH * self.FRAME_RESIZE_FACTOR),
+                                             int(self.FRAME_HEIGHT * self.FRAME_RESIZE_FACTOR)),
+                                             interpolation = cv2.INTER_AREA)
                 if frame_counter == 0:
-                    queue_head_pose_estimation_input.put_nowait(frame)
+                    queue_head_pose_estimation_input.put_nowait(head_pose_estimation_frame)
                     queue_hand_gesture_recognition_input.put_nowait(frame)
             except queue.Full:
                 continue
@@ -388,7 +393,7 @@ class SerialMessenger:
     MILISSECOND = 1/1e3
     FRAME_HEIGHT = 720
     FRAME_WIDTH = 1280
-    X_STEP = 10
+    X_STEP = 2
     Y_STEP = 3
 
     def __init__(self):
@@ -428,8 +433,12 @@ class SerialMessenger:
     def send_command_and_get_response(self, command):
         """Sends the serial command via serial."""
 
-        self.driver.write(bytes(str(command), "utf-8"))
-        time.sleep(2.1 * self.MILISSECOND)
+        response = None
+        try:
+            self.driver.write(bytes(str(command), "utf-8"))
+            time.sleep(2.1 * self.MILISSECOND)
+        except AttributeError:
+            return response
 
         try:
             response = (self.driver.readline()).decode()
@@ -445,11 +454,12 @@ class SerialMessenger:
         while True:
 
             head_angle, nose_coordinates = pipe_connection.recv()
-            x_distance = int(self.FRAME_WIDTH // 2 - nose_coordinates[0]) // self.X_STEP
-            y_distance = int(nose_coordinates[1] - self.FRAME_HEIGHT // 2) // self.Y_STEP
-            command = self.build_command_string(x_distance, y_distance)
+            x_distance = int((self.FRAME_WIDTH * 0.2) // 2 - nose_coordinates[0]) // self.X_STEP
+            y_distance = int(nose_coordinates[1] - (self.FRAME_HEIGHT * 0.2) // 2) // self.Y_STEP
 
-            text = "forward"
+            command = self.build_command_string(0, x_distance)
+
+            text = "looking forward"
             if head_angle < -self.HEAD_ANGLE_THRESHOLD:
                 text = "looking left"
             elif head_angle > self.HEAD_ANGLE_THRESHOLD:
@@ -460,7 +470,7 @@ class SerialMessenger:
             print(f"Command: {command}")
 
             response = self.send_command_and_get_response(command)
-            
+
             if response:
                 print(f"Response: {response}")
 
@@ -485,9 +495,9 @@ def serial_messeger_worker(pipe_connection):
 if __name__ == '__main__':
     multiprocessing.freeze_support()
 
-    frame_server = FrameServer(frame_step=10)
+    frame_server = FrameServer(frame_step=1)
     frame_processor = FrameProcessing()
-    process_manager = ProcessManager(3)
+    process_manager = ProcessManager(1)
 
     process_manager.set_serial_communication_process(serial_messeger_worker)
     process_manager.serial_communication_process.start()
