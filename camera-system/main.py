@@ -37,18 +37,20 @@ class GuiApplication:
     frame_width = 1280
     frame_height = 720
     frame_depth = 3
+    hand_gesture_label = ""
 
     raw_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
     head_pose_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
     hand_pose_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
 
-    def __init__(self, raw_frame_queue, head_pose_queue, hand_pose_queue):
+    def __init__(self, raw_frame_queue, head_pose_queue, hand_pose_queue, pipe_connection):
         self.window = tk.Tk()
         self.window.title(self._WINDOW_NAME)
 
         self.raw_frame_queue = raw_frame_queue
         self.head_pose_queue = head_pose_queue
         self.hand_pose_queue = hand_pose_queue
+        self.pipe_connection = pipe_connection
 
         self.main_viewer_frame = tk.Frame(self.window, width=self.frame_width * 0.6,
                                           height=self.frame_height * 0.6)
@@ -75,6 +77,11 @@ class GuiApplication:
                                      height=self.frame_height * 0.2)
         self.hand_canvas.pack(side=tk.TOP)
 
+        self.gesture_label = tk.Label(self.debug_viewer_frame,
+                                      font='Courier 18 bold',
+                                      bg="black", fg="green")
+        self.gesture_label.pack(side=tk.TOP, fill=tk.BOTH)
+
         self.main_stream_label = tk.Label(self.debug_viewer_frame, text="Hand Gesture Recognition")
         self.main_stream_label.pack(side=tk.TOP)
 
@@ -98,6 +105,11 @@ class GuiApplication:
         except queue.Empty:
             pass
 
+        if self.pipe_connection.poll():
+            self.hand_gesture_label = self.pipe_connection.recv()
+            self.gesture_label.configure(text=self.hand_gesture_label)
+        
+
         main_canva_frame = cv2.resize(self.raw_frame,
                                       (int(self.frame_width * 0.5),
                                       int(self.frame_height * 0.5)),
@@ -116,7 +128,7 @@ class GuiApplication:
                                       interpolation = cv2.INTER_AREA)
         self.hand_canva_frame = PIL.ImageTk.PhotoImage(image=PIL.Image.fromarray(hand_canva_frame))
         self.hand_canvas.create_image(0, 0, image=self.hand_canva_frame, anchor = tk.NW)
-
+        self.gesture_label.config(text=self.hand_gesture_label)
         self.window.after(self.delay, self.update)
 
 
@@ -247,7 +259,7 @@ class FrameProcessing:
                                                .get_default_face_mesh_tesselation_style())
                 queue_output.put(input_frame)
 
-    def hand_gesture_recognition(self, queue_input, queue_output):
+    def hand_gesture_recognition(self, queue_input, queue_output, pipe_connection):
         """Recognizes hand gestures that eventually appear in frames received
         by the input queue, draws landmakrs and the nose direction vector.
         At the end, it attaches the edited frame to the output queue."""
@@ -276,6 +288,7 @@ class FrameProcessing:
         while True:
             input_frame = queue_input.get()
             results = hands.process(input_frame)
+            gesture_label = ""
 
             if results.multi_hand_landmarks is not None:
                 for hand_landmarks, handedness in zip(results.multi_hand_landmarks,
@@ -294,11 +307,11 @@ class FrameProcessing:
                     hand_gesture_list.append(hand_gesture_id)
                     most_common_gesture = Counter(hand_gesture_list).most_common()
 
-                    print(most_common_gesture[0][0])
-
-
-
-
+                    # print(keypoint_classifier_labels[most_common_gesture[0][0]])
+                    gesture_label = keypoint_classifier_labels[most_common_gesture[0][0]]
+            
+            if not pipe_connection.poll():
+                pipe_connection.send(gesture_label)
             queue_output.put(input_frame)
 
     def calculate_hand_bounding_box(self, image, landmarks):
@@ -537,6 +550,7 @@ class ProcessManager:
         self.serial_communication_process = Process()
 
         self.recv_connection, self.send_connection = Pipe()
+        self.revc_gesture_label, self.send_gesture_label = Pipe()
 
         self._all_queues_ = [self.queue_raw_frame_server_input,
                             self.queue_raw_frame_server_output,
@@ -576,7 +590,8 @@ class ProcessManager:
 
         self.hand_gesture_recognition_process = Process(target=hand_gesture_recognition_target,
                                                     args=(self.queue_hand_gesture_recognition_input,
-                                                    self.queue_hand_gesture_recognition_output,))
+                                                    self.queue_hand_gesture_recognition_output,
+                                                    self.send_gesture_label,))
         self._all_processes_.append(self.hand_gesture_recognition_process)
 
     def set_head_pose_pipe_connection_process(self, head_pose_pipe_connection_target):
@@ -742,7 +757,8 @@ if __name__ == '__main__':
 
     gui = GuiApplication(process_manager.queue_raw_frame_server_output,
                          process_manager.queue_head_pose_estimation_output,
-                         process_manager.queue_hand_gesture_recognition_output)
+                         process_manager.queue_hand_gesture_recognition_output,
+                         process_manager.revc_gesture_label)
 
     process_manager.close_all_pipes()
     process_manager.close_all_queues()
