@@ -37,11 +37,12 @@ class GuiApplication:
     frame_width = 1280
     frame_height = 720
     frame_depth = 3
-    hand_gesture_label = ""
+    hand_gesture_name = ""
 
     raw_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
     head_pose_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
     hand_pose_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
+    output_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
 
     def __init__(self, raw_frame_queue, head_pose_queue, hand_pose_queue, pipe_connection):
         self.window = tk.Tk()
@@ -52,38 +53,59 @@ class GuiApplication:
         self.hand_pose_queue = hand_pose_queue
         self.pipe_connection = pipe_connection
 
-        self.main_viewer_frame = tk.Frame(self.window, width=self.frame_width * 0.6,
-                                          height=self.frame_height * 0.6)
-        self.main_viewer_frame.pack(side=tk.RIGHT)
+        self.main_viewer_frame = tk.Frame(self.window)
+        self.main_viewer_frame.pack(side=tk.TOP)
 
-        self.debug_viewer_frame = tk.Frame(self.window, height=self.frame_height * 0.4)
-        self.debug_viewer_frame.pack(side=tk.LEFT)
+        self.debug_viewer_frame = tk.Frame(self.window)
+        self.debug_viewer_frame.pack(side=tk.BOTTOM)
 
-        self.main_canvas = tk.Canvas(self.main_viewer_frame, width=self.frame_width * 0.5,
-                                     height=self.frame_height * 0.5)
-        self.main_canvas.pack(side=tk.TOP)
+        self.head_pose_viewer_frame = tk.Frame(self.debug_viewer_frame)
+        self.head_pose_viewer_frame.pack(side=tk.LEFT)
 
-        self.main_stream_label = tk.Label(self.main_viewer_frame, text="Input")
-        self.main_stream_label.pack(side=tk.BOTTOM)
+        self.hand_gesture_viwer_frame = tk.Frame(self.debug_viewer_frame)
+        self.hand_gesture_viwer_frame.pack(side=tk.RIGHT)
 
-        self.face_canvas = tk.Canvas(self.debug_viewer_frame, width=self.frame_width * 0.2,
+        self.input_viewer_frame = tk.Frame(self.main_viewer_frame)
+        self.input_viewer_frame.pack(side=tk.LEFT)
+
+        self.output_viewer_frame = tk.Frame(self.main_viewer_frame)
+        self.output_viewer_frame.pack(side=tk.RIGHT)
+
+        self.input_cava = tk.Canvas(self.input_viewer_frame, width=self.frame_width * 0.4,
+                                     height=self.frame_height * 0.4)
+        self.input_cava.pack(side=tk.TOP)
+
+        self.input_label = tk.Label(self.input_viewer_frame, text="Input")
+        self.input_label.pack(side=tk.BOTTOM)
+
+        self.output_canva = tk.Canvas(self.output_viewer_frame, width=self.frame_width * 0.4,
+                                     height=self.frame_height * 0.4)
+        self.output_canva.pack(side=tk.TOP)
+
+        self.output_label = tk.Label(self.output_viewer_frame, text="Output")
+        self.output_label.pack(side=tk.BOTTOM)
+
+        self.head_canvas = tk.Canvas(self.head_pose_viewer_frame,
+                                     width=self.frame_width * 0.2,
                                      height=self.frame_height * 0.2)
-        self.face_canvas.pack(side=tk.TOP)
+        self.head_canvas.pack(side=tk.TOP)
 
-        self.main_stream_label = tk.Label(self.debug_viewer_frame, text="Head Pose Estimation")
-        self.main_stream_label.pack(side=tk.TOP)
+        self.head_pose_label = tk.Label(self.head_pose_viewer_frame, text="Head Pose Estimation")
+        self.head_pose_label.pack(side=tk.BOTTOM)
 
-        self.hand_canvas = tk.Canvas(self.debug_viewer_frame, width=self.frame_width * 0.2,
+        self.hand_canvas = tk.Canvas(self.hand_gesture_viwer_frame,
+                                     width=self.frame_width * 0.2,
                                      height=self.frame_height * 0.2)
         self.hand_canvas.pack(side=tk.TOP)
 
-        self.gesture_label = tk.Label(self.debug_viewer_frame,
-                                      font='Courier 18 bold',
-                                      bg="black", fg="green")
-        self.gesture_label.pack(side=tk.TOP, fill=tk.BOTH)
+        self.gesture_name_label = tk.Label(self.hand_gesture_viwer_frame,
+                                           font="Courier 18 bold", text="",
+                                           bg="black", fg="green")
+        self.gesture_name_label.pack(side=tk.TOP, fill=tk.BOTH)
 
-        self.main_stream_label = tk.Label(self.debug_viewer_frame, text="Hand Gesture Recognition")
-        self.main_stream_label.pack(side=tk.TOP)
+        self.hand_gesture_label = tk.Label(self.hand_gesture_viwer_frame,
+                                           text="Hand Gesture Recognition")
+        self.hand_gesture_label.pack(side=tk.TOP)
 
         self.delay = 1
         self.update()
@@ -106,21 +128,21 @@ class GuiApplication:
             pass
 
         if self.pipe_connection.poll():
-            self.hand_gesture_label = self.pipe_connection.recv()
-            self.gesture_label.configure(text=self.hand_gesture_label)
-        
+            self.hand_gesture_name = self.pipe_connection.recv()
+            self.gesture_name_label.configure(text=self.hand_gesture_name)
 
-        main_canva_frame = cv2.resize(self.raw_frame,
-                                      (int(self.frame_width * 0.5),
-                                      int(self.frame_height * 0.5)),
+
+        input_canva_frame = cv2.resize(self.raw_frame,
+                                      (int(self.frame_width * 0.4),
+                                      int(self.frame_height * 0.4)),
                                       interpolation = cv2.INTER_AREA)
 
-        self.main_canva_frame = PIL.ImageTk.PhotoImage(image=PIL.Image.fromarray(main_canva_frame))
-        self.main_canvas.create_image(0, 0, image=self.main_canva_frame, anchor = tk.NW)
+        self.input_canva_frame = PIL.ImageTk.PhotoImage(image=PIL.Image.fromarray(input_canva_frame))
+        self.input_cava.create_image(0, 0, image=self.input_canva_frame, anchor = tk.NW)
 
         heap_pose_frame = PIL.Image.fromarray(self.head_pose_frame)
         self.face_canva_frame = PIL.ImageTk.PhotoImage(image=heap_pose_frame)
-        self.face_canvas.create_image(0, 0, image=self.face_canva_frame, anchor = tk.NW)
+        self.head_canvas.create_image(0, 0, image=self.face_canva_frame, anchor = tk.NW)
 
         hand_canva_frame = cv2.resize(self.hand_pose_frame,
                                       (int(self.frame_width * 0.2),
@@ -128,7 +150,15 @@ class GuiApplication:
                                       interpolation = cv2.INTER_AREA)
         self.hand_canva_frame = PIL.ImageTk.PhotoImage(image=PIL.Image.fromarray(hand_canva_frame))
         self.hand_canvas.create_image(0, 0, image=self.hand_canva_frame, anchor = tk.NW)
-        self.gesture_label.config(text=self.hand_gesture_label)
+
+        output_canva_frame = cv2.resize(self.raw_frame,
+                                        (int(self.frame_width * 0.4),
+                                        int(self.frame_height * 0.4)),
+                                        interpolation = cv2.INTER_AREA)
+        self.output_frame = PIL.ImageTk.PhotoImage(image=PIL.Image.fromarray(output_canva_frame))
+        self.output_canva.create_image(0, 0, image=self.output_frame, anchor = tk.NW)
+
+
         self.window.after(self.delay, self.update)
 
 
@@ -489,6 +519,11 @@ class FrameProcessing:
         temp_landmark_list = list(map(normalize_, temp_landmark_list))
 
         return temp_landmark_list
+
+    def apply_zoom(self):
+        """Applies zoom in or zoom out to the output frames."""
+        pass
+
 
 class FrameServer:
     """Class that manages the distribution of frames between the
