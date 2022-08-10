@@ -220,6 +220,11 @@ class FrameProcessing:
     mp_drawing = mp.solutions.drawing_utils
     mp_drawing_styles = mp.solutions.drawing_styles
     mp_hands = mp.solutions.hands
+    last_gesture = ""
+    elapsed_time = 0
+    initial_time = 0
+    last_time = 0
+    is_counting = False
 
     def __init__(self):
         pass
@@ -337,11 +342,34 @@ class FrameProcessing:
                     hand_gesture_list.append(hand_gesture_id)
                     most_common_gesture = Counter(hand_gesture_list).most_common()
 
-                    # print(keypoint_classifier_labels[most_common_gesture[0][0]])
                     gesture_label = keypoint_classifier_labels[most_common_gesture[0][0]]
-            
+            else:
+                self.last_gesture = ""
+
             if not pipe_connection.poll():
                 pipe_connection.send(gesture_label)
+
+            if gesture_label != "":
+                if gesture_label == self.last_gesture:
+                    if not self.is_counting:
+                        self.initial_time = time.time()
+                        self.is_counting = True
+                    else:
+                        self.last_time = time.time()
+                else:
+                    self.last_gesture = gesture_label
+                    self.initial_time = 0
+                    self.last_time = 0
+                    self.is_counting = False
+
+            if self.initial_time != 0:
+                self.elapsed_time = self.last_time - self.initial_time
+
+            if self.elapsed_time > 5:
+                if self.last_gesture == "Zoom In":
+                    self.apply_zoom()
+                elif self.last_gesture == "Zoom Out":
+                    self.apply_zoom()
             queue_output.put(input_frame)
 
     def calculate_hand_bounding_box(self, image, landmarks):
@@ -522,7 +550,7 @@ class FrameProcessing:
 
     def apply_zoom(self):
         """Applies zoom in or zoom out to the output frames."""
-        pass
+        print("Tamo ai na atividade")
 
 
 class FrameServer:
