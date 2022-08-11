@@ -785,7 +785,9 @@ class SerialMessenger:
     X_STEP = 2
     Y_STEP = 3
 
-    def __init__(self):
+    def __init__(self, debug=False):
+
+        self.debug = debug
 
         try:
             self.driver = serial.Serial(port='COM3', baudrate=115200, timeout=.1)
@@ -793,7 +795,9 @@ class SerialMessenger:
             self.driver = None
         else:
             time.sleep(self.WAIT_SERIAL_CONNECTION)
-            print("Serial Connected!")
+
+            if self.debug:
+                print("Serial Connected!")
 
     def string_padding(self, value):
         """Add the correct number of zeros to the string to build a valid message."""
@@ -854,13 +858,14 @@ class SerialMessenger:
             elif head_angle > self.HEAD_ANGLE_THRESHOLD:
                 text = "looking right"
 
-            # print(f"Head is {text}!")
-            # print(f"Head angle: {head_angle}")
-            # print(f"Command: {command}")
+            if self.debug:
+                print(f"Head is {text}!")
+                print(f"Head angle: {head_angle}")
+                print(f"Command: {command}")
 
             response = self.send_command_and_get_response(command)
 
-            if response:
+            if response and self.debug:
                 print(f"Response: {response}")
 
 
@@ -869,7 +874,7 @@ def acquirer_proxy(frames_queue):
     function is not used for this process the pickle module raises an exception
      because of opencv."""
 
-    camera = FrameAcquisition()
+    camera = FrameAcquisition(1)
     camera.open_camera()
     camera.acquirer_worker(frames_queue)
 
