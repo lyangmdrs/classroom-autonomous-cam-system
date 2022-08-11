@@ -74,7 +74,7 @@ class SerialMessenger:
 
             head_angle, nose_coordinates = pipe_connection.recv()
             x_distance = int((self.FRAME_WIDTH * 0.2) // 2 - nose_coordinates[0]) // self.X_STEP
-            y_distance = int(nose_coordinates[1] - (self.FRAME_HEIGHT * 0.2) // 2) // self.Y_STEP
+            # y_distance = int(nose_coordinates[1] - (self.FRAME_HEIGHT * 0.2) // 2) // self.Y_STEP
 
             command = self.build_command_string(0, x_distance)
 
