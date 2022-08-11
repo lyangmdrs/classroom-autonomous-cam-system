@@ -233,9 +233,11 @@ class FrameProcessing:
     is_counting = False
     scaled_width = 1280
     scaled_height = 720
+    cropped_width = 1280
+    cropped_height = 720
     pad_x = 0
     pad_y = 0
-    zoom_step = 1.2
+    zoom_step = 1.05
     current_zoom = 0
     maximum_zoom = 2
 
@@ -575,34 +577,31 @@ class FrameProcessing:
             if pipe_connection.poll():
                 command = pipe_connection.recv()
 
-            current_zoom = self.scaled_width // width
+            current_zoom = 1 / (self.cropped_width / width)
 
             if command == "Zoom In":
 
                 if current_zoom <= 4:
-                    self.scaled_width = int(self.scaled_width * self.zoom_step)
-                    self.scaled_height = int(self.scaled_height * self.zoom_step)
+                    self.cropped_width = int(self.cropped_width // self.zoom_step)
+                    self.cropped_height = int(self.cropped_height // self.zoom_step)
 
             elif command == "Zoom Out":
 
                 if current_zoom >= 1:
-                    self.scaled_width = int(self.scaled_width // self.zoom_step)
-                    self.scaled_height = int(self.scaled_height // self.zoom_step)
+                    self.cropped_width = int(self.cropped_width * self.zoom_step)
+                    self.cropped_height = int(self.cropped_height * self.zoom_step)
 
-            self.pad_x = (self.scaled_width - width) // 2
-            self.pad_y = (self.scaled_height - height) // 2
+            self.pad_x = (width - self.cropped_width) // 2
+            self.pad_y = (height - self.cropped_height) // 2
 
             self.pad_x = max(self.pad_x, 0)
             self.pad_y = max(self.pad_y, 0)
 
-            self.scaled_width = max(self.scaled_width, width)
-            self.scaled_height = max(self.scaled_height, height)
-
-            frame = frame[self.pad_y:self.pad_y+self.scaled_height,
-                          self.pad_x:self.pad_x+self.scaled_width]
+            frame = frame[self.pad_y:self.pad_y + self.cropped_height,
+                          self.pad_x:self.pad_x + self.cropped_width]
 
             frame = cv2.resize(frame, (self.scaled_width, self.scaled_height),
-                               interpolation=cv2.INTER_LINEAR)
+                               interpolation=cv2.INTER_CUBIC)
 
             try:
                 queue_output.put_nowait(frame)
