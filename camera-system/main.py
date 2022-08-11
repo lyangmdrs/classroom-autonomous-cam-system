@@ -51,8 +51,8 @@ if __name__ == '__main__':
     process_manager.set_hand_gesture_recognition_process(frame_processor.hand_gesture_recognition)
     process_manager.hand_gesture_recognition_process.start()
 
-    process_manager.set_zoom_process(camera_controller.apply_zoom)
-    process_manager.zoom_process.start()
+    process_manager.set_hand_command_receiver_process(camera_controller.hand_command_receiver)
+    process_manager.hand_command_receiver_process.start()
 
     gui = GuiApplication(process_manager.queue_raw_frame_server_output,
                          process_manager.queue_head_pose_estimation_output,

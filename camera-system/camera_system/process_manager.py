@@ -27,7 +27,7 @@ class ProcessManager:
         self.hand_gesture_recognition_process = Process()
         self.head_pose_pipe_connection_process = Process()
         self.serial_communication_process = Process()
-        self.zoom_process = Process()
+        self.hand_command_receiver_process = Process()
 
         self.recv_connection, self.send_connection = Pipe()
         self.recv_gesture_label, self.send_gesture_label = Pipe()
@@ -92,13 +92,13 @@ class ProcessManager:
                                                     args=(self.recv_connection,))
         self._all_processes_.append(self.serial_communication_process)
 
-    def set_zoom_process(self, zoom_target):
-        """Configrues the process that applies zoom in and zoom out."""
-        self.zoom_process = Process(target=zoom_target,
-                                    args=(self.queue_processed_frames_input,
-                                    self.queue_processed_frames_output,
-                                    self.recv_zoom_process,))
-        self._all_processes_.append(self.zoom_process)
+    def set_hand_command_receiver_process(self, hand_command_receiver_target):
+        """Configrues the process that receives hand commands."""
+        self.hand_command_receiver_process = Process(target=hand_command_receiver_target,
+                                                     args=(self.queue_processed_frames_input,
+                                                     self.queue_processed_frames_output,
+                                                     self.recv_zoom_process,))
+        self._all_processes_.append(self.hand_command_receiver_process)
 
     def close_all_queues(self):
         """Terminates all frame queues used in processes."""
