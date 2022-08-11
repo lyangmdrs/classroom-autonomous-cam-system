@@ -25,13 +25,7 @@ class FrameProcessing:
     initial_time = 0
     last_time = 0
     is_counting = False
-    cropped_width = 1280
-    cropped_height = 720
-    pad_x = 0
-    pad_y = 0
-    zoom_step = 1.05
-    current_zoom = 0
-    maximum_zoom = 2
+    
 
     def __init__(self):
         pass
@@ -357,44 +351,3 @@ class FrameProcessing:
         temp_landmark_list = list(map(normalize_, temp_landmark_list))
 
         return temp_landmark_list
-
-    def apply_zoom(self, queue_input, queue_output, pipe_connection):
-        """Applies zoom in or zoom out to the output frames."""
-
-        while True:
-            command = ""
-            frame = queue_input.get()
-            height, width = frame.shape[:2]
-
-            if pipe_connection.poll():
-                command = pipe_connection.recv()
-
-            current_zoom = 1 / (self.cropped_width / width)
-
-            if command == "Zoom In":
-
-                if current_zoom <= 4:
-                    self.cropped_width = int(self.cropped_width // self.zoom_step)
-                    self.cropped_height = int(self.cropped_height // self.zoom_step)
-
-            elif command == "Zoom Out":
-
-                if current_zoom >= 1:
-                    self.cropped_width = int(self.cropped_width * self.zoom_step)
-                    self.cropped_height = int(self.cropped_height * self.zoom_step)
-
-            self.pad_x = (width - self.cropped_width) // 2
-            self.pad_y = (height - self.cropped_height) // 2
-
-            self.pad_x = max(self.pad_x, 0)
-            self.pad_y = max(self.pad_y, 0)
-
-            frame = frame[self.pad_y:self.pad_y + self.cropped_height,
-                          self.pad_x:self.pad_x + self.cropped_width]
-
-            frame = cv2.resize(frame, (width, height), interpolation=cv2.INTER_CUBIC)
-
-            try:
-                queue_output.put_nowait(frame)
-            except queue.Full:
-                pass

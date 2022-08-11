@@ -6,6 +6,7 @@ from camera_system.process_manager import ProcessManager
 from camera_system.gui_application import GuiApplication
 from camera_system.frame_processing import FrameProcessing
 from camera_system.serial_messenger import SerialMessenger
+from camera_system.camera_controller import CameraController
 from camera_system.frame_acquisition import FrameAcquisition
 
 CAMERA_INDEX = 1
@@ -33,6 +34,7 @@ if __name__ == '__main__':
     frame_server = FrameServer(frame_step=1)
     frame_processor = FrameProcessing()
     process_manager = ProcessManager(1)
+    camera_controller = CameraController()
 
     process_manager.set_serial_communication_process(serial_messeger_worker)
     process_manager.serial_communication_process.start()
@@ -49,7 +51,7 @@ if __name__ == '__main__':
     process_manager.set_hand_gesture_recognition_process(frame_processor.hand_gesture_recognition)
     process_manager.hand_gesture_recognition_process.start()
 
-    process_manager.set_zoom_process(frame_processor.apply_zoom)
+    process_manager.set_zoom_process(camera_controller.apply_zoom)
     process_manager.zoom_process.start()
 
     gui = GuiApplication(process_manager.queue_raw_frame_server_output,
