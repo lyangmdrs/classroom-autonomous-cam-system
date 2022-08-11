@@ -96,7 +96,7 @@ class FrameProcessing:
                 queue_output.put(input_frame)
 
     def hand_gesture_recognition(self, queue_input, queue_output,
-                                 pipe_connection, zoom_pipe):
+                                 pipe_connection, command_pipe):
         """Recognizes hand gestures that eventually appear in frames received
         by the input queue, draws landmakrs and the nose direction vector.
         At the end, it attaches the edited frame to the output queue."""
@@ -168,12 +168,9 @@ class FrameProcessing:
                 self.elapsed_time = self.last_time - self.initial_time
 
             if self.elapsed_time > 5:
-                if self.last_gesture == "Zoom In":
-                    if not zoom_pipe.poll():
-                        zoom_pipe.send(self.last_gesture)
-                elif self.last_gesture == "Zoom Out":
-                    if not zoom_pipe.poll():
-                        zoom_pipe.send(self.last_gesture)
+                if not command_pipe.poll():
+                    command_pipe.send(self.last_gesture)
+
             queue_output.put(input_frame)
 
     def calculate_hand_bounding_box(self, image, landmarks):
