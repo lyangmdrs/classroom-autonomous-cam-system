@@ -20,14 +20,14 @@ class CameraController:
     def __init__(self):
         pass
 
-    def hand_command_receiver(self, queue_input, queue_output, pipe_connection):
+    def hand_command_receiver(self, queue_input, queue_output, comand_pipe, head_position_pipe):
         """Receives and executes the hand commands."""
 
         while True:
             command = ""
 
-            if pipe_connection.poll():
-                command = pipe_connection.recv()
+            if comand_pipe.poll():
+                command = comand_pipe.recv()
 
             frame = queue_input.get()
             height, width = frame.shape[:2]
