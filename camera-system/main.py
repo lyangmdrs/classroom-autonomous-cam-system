@@ -8,13 +8,14 @@ from camera_system.frame_processing import FrameProcessing
 from camera_system.serial_messenger import SerialMessenger
 from camera_system.frame_acquisition import FrameAcquisition
 
+CAMERA_INDEX = 1
 
-def acquirer_proxy(frames_queue):
+def acquirer_worker(frames_queue):
     """Proxy function for creating the frame acquisition process. If a proxy
     function is not used for this process the pickle module raises an exception
      because of opencv."""
 
-    camera = FrameAcquisition(1)
+    camera = FrameAcquisition(CAMERA_INDEX)
     camera.open_camera()
     camera.acquirer_worker(frames_queue)
 
@@ -36,7 +37,7 @@ if __name__ == '__main__':
     process_manager.set_serial_communication_process(serial_messeger_worker)
     process_manager.serial_communication_process.start()
 
-    process_manager.set_acquirer_process(acquirer_proxy)
+    process_manager.set_acquirer_process(acquirer_worker)
     process_manager.acquirer_process.start()
 
     process_manager.set_frame_server_process(frame_server.start_server)
