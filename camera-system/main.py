@@ -19,10 +19,10 @@ from collections import deque
 from collections import Counter
 from model import KeyPointClassifier
 from model import PointHistoryClassifier
-from multiprocessing import Pipe, Process, Queue
 
 from camera_system import serial_messenger as sm
 from camera_system import process_manager as pm
+from camera_system import frame_server as fs
 
 class GuiApplication:
     """Crates a graphic user interface."""
@@ -608,56 +608,6 @@ class FrameProcessing:
                 pass
 
 
-class FrameServer:
-    """Class that manages the distribution of frames between the
-    different processes of the autonomous camera system."""
-
-    FRAME_RESIZE_FACTOR = 0.2
-    FRAME_WIDTH = 1280
-    FRAME_HEIGHT = 720
-
-    def __init__(self, frame_step=5):
-
-        self.frame_step = frame_step
-
-    def start_server(self, queue_raw_frame_server_input: Queue,
-                     queue_raw_frame_server_output: Queue,
-                     queue_head_pose_estimation_output: Queue,
-                     queue_hand_gesture_recognition_output: Queue,
-                     queue_processed_frame_output: Queue):
-        """Starts frame server main loop."""
-
-        frame_counter = 0
-
-        while True:
-            frame = queue_raw_frame_server_input.get()
-            try:
-                queue_raw_frame_server_output.put_nowait(frame)
-            except queue.Full:
-                pass
-            try:
-                queue_processed_frame_output.put_nowait(frame)
-            except queue.Full:
-                pass
-
-            frame_counter = (frame_counter + 1) % self.frame_step
-            head_pose_estimation_frame = cv2.resize(frame,
-                                            (int(self.FRAME_WIDTH * self.FRAME_RESIZE_FACTOR),
-                                            int(self.FRAME_HEIGHT * self.FRAME_RESIZE_FACTOR)),
-                                            interpolation = cv2.INTER_AREA)
-
-            if frame_counter == 0:
-                try:
-                    queue_head_pose_estimation_output.put_nowait(head_pose_estimation_frame)
-                except queue.Full:
-                    pass
-
-                try:
-                    queue_hand_gesture_recognition_output.put_nowait(frame)
-                except queue.Full:
-                    pass
-
-
 def acquirer_proxy(frames_queue):
     """Proxy function for creating the frame acquisition process. If a proxy
     function is not used for this process the pickle module raises an exception
@@ -678,7 +628,7 @@ def serial_messeger_worker(pipe_connection):
 if __name__ == '__main__':
     multiprocessing.freeze_support()
 
-    frame_server = FrameServer(frame_step=1)
+    frame_server = fs.FrameServer(frame_step=1)
     frame_processor = FrameProcessing()
     process_manager = pm.ProcessManager(1)
 
