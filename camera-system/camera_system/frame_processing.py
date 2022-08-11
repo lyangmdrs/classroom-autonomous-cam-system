@@ -25,7 +25,6 @@ class FrameProcessing:
     initial_time = 0
     last_time = 0
     is_counting = False
-    
 
     def __init__(self):
         pass
