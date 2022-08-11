@@ -42,9 +42,10 @@ class GuiApplication:
     raw_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
     head_pose_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
     hand_pose_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
-    output_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
+    processed_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
 
-    def __init__(self, raw_frame_queue, head_pose_queue, hand_pose_queue, pipe_connection):
+    def __init__(self, raw_frame_queue, head_pose_queue,
+                 hand_pose_queue, pipe_connection, output_frame_queue):
         self.window = tk.Tk()
         self.window.title(self._WINDOW_NAME)
 
@@ -52,6 +53,7 @@ class GuiApplication:
         self.head_pose_queue = head_pose_queue
         self.hand_pose_queue = hand_pose_queue
         self.pipe_connection = pipe_connection
+        self.processed_queue = output_frame_queue
 
         self.main_viewer_frame = tk.Frame(self.window)
         self.main_viewer_frame.pack(side=tk.TOP)
@@ -126,6 +128,10 @@ class GuiApplication:
             self.hand_pose_frame = self.hand_pose_queue.get_nowait()
         except queue.Empty:
             pass
+        try:
+            self.processed_frame = self.processed_queue.get_nowait()
+        except queue.Empty:
+            pass
 
         if self.pipe_connection.poll():
             self.hand_gesture_name = self.pipe_connection.recv()
@@ -151,7 +157,7 @@ class GuiApplication:
         self.hand_canva_frame = PIL.ImageTk.PhotoImage(image=PIL.Image.fromarray(hand_canva_frame))
         self.hand_canvas.create_image(0, 0, image=self.hand_canva_frame, anchor = tk.NW)
 
-        output_canva_frame = cv2.resize(self.raw_frame,
+        output_canva_frame = cv2.resize(self.processed_frame,
                                         (int(self.frame_width * 0.4),
                                         int(self.frame_height * 0.4)),
                                         interpolation = cv2.INTER_AREA)
@@ -225,6 +231,13 @@ class FrameProcessing:
     initial_time = 0
     last_time = 0
     is_counting = False
+    scaled_width = 1280
+    scaled_height = 720
+    pad_x = 0
+    pad_y = 0
+    zoom_step = 1.2
+    current_zoom = 0
+    maximum_zoom = 2
 
     def __init__(self):
         pass
@@ -294,7 +307,8 @@ class FrameProcessing:
                                                .get_default_face_mesh_tesselation_style())
                 queue_output.put(input_frame)
 
-    def hand_gesture_recognition(self, queue_input, queue_output, pipe_connection):
+    def hand_gesture_recognition(self, queue_input, queue_output,
+                                 pipe_connection, zoom_pipe):
         """Recognizes hand gestures that eventually appear in frames received
         by the input queue, draws landmakrs and the nose direction vector.
         At the end, it attaches the edited frame to the output queue."""
@@ -367,9 +381,11 @@ class FrameProcessing:
 
             if self.elapsed_time > 5:
                 if self.last_gesture == "Zoom In":
-                    self.apply_zoom()
+                    if not zoom_pipe.poll():
+                        zoom_pipe.send(self.last_gesture)
                 elif self.last_gesture == "Zoom Out":
-                    self.apply_zoom()
+                    if not zoom_pipe.poll():
+                        zoom_pipe.send(self.last_gesture)
             queue_output.put(input_frame)
 
     def calculate_hand_bounding_box(self, image, landmarks):
@@ -548,9 +564,50 @@ class FrameProcessing:
 
         return temp_landmark_list
 
-    def apply_zoom(self):
+    def apply_zoom(self, queue_input, queue_output, pipe_connection):
         """Applies zoom in or zoom out to the output frames."""
-        print("Tamo ai na atividade")
+
+        while True:
+            command = ""
+            frame = queue_input.get()
+            height, width = frame.shape[:2]
+
+            if pipe_connection.poll():
+                command = pipe_connection.recv()
+
+            current_zoom = self.scaled_width // width
+
+            if command == "Zoom In":
+
+                if current_zoom <= 4:
+                    self.scaled_width = int(self.scaled_width * self.zoom_step)
+                    self.scaled_height = int(self.scaled_height * self.zoom_step)
+
+            elif command == "Zoom Out":
+
+                if current_zoom >= 1:
+                    self.scaled_width = int(self.scaled_width // self.zoom_step)
+                    self.scaled_height = int(self.scaled_height // self.zoom_step)
+
+            self.pad_x = (self.scaled_width - width) // 2
+            self.pad_y = (self.scaled_height - height) // 2
+
+            self.pad_x = max(self.pad_x, 0)
+            self.pad_y = max(self.pad_y, 0)
+
+            self.scaled_width = max(self.scaled_width, width)
+            self.scaled_height = max(self.scaled_height, height)
+
+            frame = frame[self.pad_y:self.pad_y+self.scaled_height,
+                          self.pad_x:self.pad_x+self.scaled_width]
+
+            frame = cv2.resize(frame, (self.scaled_width, self.scaled_height),
+                               interpolation=cv2.INTER_LINEAR)
+
+            try:
+                queue_output.put_nowait(frame)
+            except queue.Full:
+                pass
 
 
 class FrameServer:
@@ -567,25 +624,40 @@ class FrameServer:
 
     def start_server(self, queue_raw_frame_server_input: Queue,
                      queue_raw_frame_server_output: Queue,
-                     queue_head_pose_estimation_input: Queue,
-                     queue_hand_gesture_recognition_input: Queue):
+                     queue_head_pose_estimation_output: Queue,
+                     queue_hand_gesture_recognition_output: Queue,
+                     queue_processed_frame_output: Queue):
         """Starts frame server main loop."""
 
         frame_counter = 0
+
         while True:
             frame = queue_raw_frame_server_input.get()
             try:
                 queue_raw_frame_server_output.put_nowait(frame)
-                frame_counter = (frame_counter + 1) % self.frame_step
-                head_pose_estimation_frame = cv2.resize(frame,
-                                             (int(self.FRAME_WIDTH * self.FRAME_RESIZE_FACTOR),
-                                             int(self.FRAME_HEIGHT * self.FRAME_RESIZE_FACTOR)),
-                                             interpolation = cv2.INTER_AREA)
-                if frame_counter == 0:
-                    queue_head_pose_estimation_input.put_nowait(head_pose_estimation_frame)
-                    queue_hand_gesture_recognition_input.put_nowait(frame)
             except queue.Full:
-                continue
+                pass
+            try:
+                queue_processed_frame_output.put_nowait(frame)
+            except queue.Full:
+                pass
+
+            frame_counter = (frame_counter + 1) % self.frame_step
+            head_pose_estimation_frame = cv2.resize(frame,
+                                            (int(self.FRAME_WIDTH * self.FRAME_RESIZE_FACTOR),
+                                            int(self.FRAME_HEIGHT * self.FRAME_RESIZE_FACTOR)),
+                                            interpolation = cv2.INTER_AREA)
+
+            if frame_counter == 0:
+                try:
+                    queue_head_pose_estimation_output.put_nowait(head_pose_estimation_frame)
+                except queue.Full:
+                    pass
+
+                try:
+                    queue_hand_gesture_recognition_output.put_nowait(frame)
+                except queue.Full:
+                    pass
 
 
 class ProcessManager:
@@ -605,22 +677,29 @@ class ProcessManager:
         self.queue_head_pose_estimation_input = Queue(queues_size)
         self.queue_head_pose_estimation_output = Queue(queues_size)
 
+        self.queue_processed_frames_input = Queue(queues_size)
+        self.queue_processed_frames_output = Queue(queues_size)
+
         self.server_process = Process()
         self.acquirer_process = Process()
         self.head_pose_estimation_process = Process()
         self.hand_gesture_recognition_process = Process()
         self.head_pose_pipe_connection_process = Process()
         self.serial_communication_process = Process()
+        self.zoom_process = Process()
 
         self.recv_connection, self.send_connection = Pipe()
-        self.revc_gesture_label, self.send_gesture_label = Pipe()
+        self.recv_gesture_label, self.send_gesture_label = Pipe()
+        self.recv_zoom_process, self.send_zoom_process = Pipe()
 
         self._all_queues_ = [self.queue_raw_frame_server_input,
                             self.queue_raw_frame_server_output,
                             self.queue_hand_gesture_recognition_input,
                             self.queue_hand_gesture_recognition_output,
                             self.queue_head_pose_estimation_input,
-                            self.queue_head_pose_estimation_output,]
+                            self.queue_head_pose_estimation_output,
+                            self.queue_processed_frames_input,
+                            self.queue_processed_frames_output]
 
     def set_acquirer_process(self, acquirer_target):
         """Configures the process for acquiring frames."""
@@ -636,7 +715,8 @@ class ProcessManager:
                                       args=(self.queue_raw_frame_server_input,
                                             self.queue_raw_frame_server_output,
                                             self.queue_head_pose_estimation_input,
-                                            self.queue_hand_gesture_recognition_input,))
+                                            self.queue_hand_gesture_recognition_input,
+                                            self.queue_processed_frames_input,))
         self._all_processes_.append(self.server_process)
 
     def set_head_pose_estimation_process(self, head_pose_estimation_target):
@@ -654,7 +734,8 @@ class ProcessManager:
         self.hand_gesture_recognition_process = Process(target=hand_gesture_recognition_target,
                                                     args=(self.queue_hand_gesture_recognition_input,
                                                     self.queue_hand_gesture_recognition_output,
-                                                    self.send_gesture_label,))
+                                                    self.send_gesture_label,
+                                                    self.send_zoom_process,))
         self._all_processes_.append(self.hand_gesture_recognition_process)
 
     def set_head_pose_pipe_connection_process(self, head_pose_pipe_connection_target):
@@ -669,6 +750,14 @@ class ProcessManager:
         self.serial_communication_process = Process(target=serial_communication_target,
                                                     args=(self.recv_connection,))
         self._all_processes_.append(self.serial_communication_process)
+
+    def set_zoom_process(self, zoom_target):
+        """Configrues the process that applies zoom in and zoom out."""
+        self.zoom_process = Process(target=zoom_target,
+                                    args=(self.queue_processed_frames_input,
+                                    self.queue_processed_frames_output,
+                                    self.recv_zoom_process,))
+        self._all_processes_.append(self.zoom_process)
 
     def close_all_queues(self):
         """Terminates all frame queues used in processes."""
@@ -818,10 +907,14 @@ if __name__ == '__main__':
     process_manager.set_hand_gesture_recognition_process(frame_processor.hand_gesture_recognition)
     process_manager.hand_gesture_recognition_process.start()
 
+    process_manager.set_zoom_process(frame_processor.apply_zoom)
+    process_manager.zoom_process.start()
+
     gui = GuiApplication(process_manager.queue_raw_frame_server_output,
                          process_manager.queue_head_pose_estimation_output,
                          process_manager.queue_hand_gesture_recognition_output,
-                         process_manager.revc_gesture_label)
+                         process_manager.recv_gesture_label,
+                         process_manager.queue_processed_frames_output)
 
     process_manager.close_all_pipes()
     process_manager.close_all_queues()
