@@ -231,8 +231,6 @@ class FrameProcessing:
     initial_time = 0
     last_time = 0
     is_counting = False
-    scaled_width = 1280
-    scaled_height = 720
     cropped_width = 1280
     cropped_height = 720
     pad_x = 0
@@ -600,8 +598,7 @@ class FrameProcessing:
             frame = frame[self.pad_y:self.pad_y + self.cropped_height,
                           self.pad_x:self.pad_x + self.cropped_width]
 
-            frame = cv2.resize(frame, (self.scaled_width, self.scaled_height),
-                               interpolation=cv2.INTER_CUBIC)
+            frame = cv2.resize(frame, (width, height), interpolation=cv2.INTER_CUBIC)
 
             try:
                 queue_output.put_nowait(frame)
