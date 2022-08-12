@@ -10,8 +10,8 @@ class GuiApplication:
     """Class that creates a graphic user interface."""
 
     _WINDOW_NAME = "Classroom Autonomus Camera System"
-    _WIDTH = 800
-    _HEIGHT = 600
+    _WIDTH = 1040
+    _HEIGHT = 510
     _WINDOW_GEOMETRY = str(_WIDTH) + "x" + str(_HEIGHT)
     _WINDOW_UPDATE_DELAY = 5
 
@@ -32,6 +32,7 @@ class GuiApplication:
                  hand_pose_queue, pipe_connection, output_frame_queue):
         self.window = tk.Tk()
         self.window.title(self._WINDOW_NAME)
+        self.window.geometry(self._WINDOW_GEOMETRY)
 
         self.raw_frame_queue = raw_frame_queue
         self.head_pose_queue = head_pose_queue
@@ -39,17 +40,27 @@ class GuiApplication:
         self.pipe_connection = pipe_connection
         self.processed_queue = output_frame_queue
 
-        self.main_viewer_frame = tk.Frame(self.window)
-        self.main_viewer_frame.pack(side=tk.TOP)
+        self.main_viewer_frame = tk.Frame(self.window, height=self._HEIGHT//2)
+        self.main_viewer_frame.pack(side=tk.TOP, ipady=10, fill=tk.X)
 
-        self.debug_viewer_frame = tk.Frame(self.window)
-        self.debug_viewer_frame.pack(side=tk.BOTTOM)
+        self.debug_viewer_frame = tk.Frame(self.window, height=self._HEIGHT//2)
+        self.debug_viewer_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
-        self.head_pose_viewer_frame = tk.Frame(self.debug_viewer_frame)
-        self.head_pose_viewer_frame.pack(side=tk.LEFT)
+        self.head_pose_viewer_frame = tk.Frame(self.debug_viewer_frame, 
+                                               width=self.frame_width * 0.2 + 10)
+        self.head_pose_viewer_frame.pack(side=tk.LEFT, ipadx=5,
+                                         fill=tk.Y, expand=True)
 
-        self.hand_gesture_viwer_frame = tk.Frame(self.debug_viewer_frame)
-        self.hand_gesture_viwer_frame.pack(side=tk.RIGHT)
+        self.hand_gesture_viwer_frame = tk.Frame(self.debug_viewer_frame,
+                                                 width=self.frame_width * 0.2 + 10)
+        self.hand_gesture_viwer_frame.pack(side=tk.LEFT, ipadx=5,
+                                           fill=tk.Y, expand=True)
+
+        self.controls_and_info_frame = tk.Frame(self.debug_viewer_frame, width=self._WIDTH//2 - 5)
+        self.controls_and_info_frame.pack(side=tk.LEFT, anchor=tk.W, fill=tk.BOTH, expand=True)
+
+        self.command_frame = tk.Frame(self.controls_and_info_frame, width=self._WIDTH//2 - 10)
+        self.command_frame.pack(side=tk.TOP, anchor=tk.W, padx=5, pady=5)
 
         self.input_viewer_frame = tk.Frame(self.main_viewer_frame)
         self.input_viewer_frame.pack(side=tk.LEFT)
@@ -74,24 +85,69 @@ class GuiApplication:
         self.head_canvas = tk.Canvas(self.head_pose_viewer_frame,
                                      width=self.frame_width * 0.2,
                                      height=self.frame_height * 0.2)
-        self.head_canvas.pack(side=tk.TOP)
+        self.head_canvas.pack()
 
         self.head_pose_label = tk.Label(self.head_pose_viewer_frame, text="Head Pose Estimation")
-        self.head_pose_label.pack(side=tk.BOTTOM)
+        self.head_pose_label.pack()
 
         self.hand_canvas = tk.Canvas(self.hand_gesture_viwer_frame,
                                      width=self.frame_width * 0.2,
                                      height=self.frame_height * 0.2)
-        self.hand_canvas.pack(side=tk.TOP)
+        self.hand_canvas.pack()
 
-        self.gesture_name_label = tk.Label(self.hand_gesture_viwer_frame,
-                                           font="Courier 18 bold", text="",
-                                           bg="black", fg="green")
-        self.gesture_name_label.pack(side=tk.TOP, fill=tk.BOTH)
+        self.command_label = tk.Label(self.command_frame, text="Command Detected:")
+        self.command_label.grid(row=0, column=0)
 
         self.hand_gesture_label = tk.Label(self.hand_gesture_viwer_frame,
                                            text="Hand Gesture Recognition")
-        self.hand_gesture_label.pack(side=tk.TOP)
+        self.hand_gesture_label.pack()
+
+        self.gesture_name_label = tk.Label(self.command_frame,
+                                           font="Courier 18 bold",
+                                           text="",
+                                           width=18,
+                                           bg="#9b9b9b",
+                                           fg="green")
+        self.gesture_name_label.grid(row=0, column=1)
+
+        self.check_boxes_frame = tk.Label(self.controls_and_info_frame)
+        self.check_boxes_frame.pack(side=tk.LEFT, fill=tk.Y)
+
+        self.follow_head_var = tk.IntVar()
+        self.follow_head_var.set(1)
+        self.follow_hand_var = tk.IntVar()
+
+        cb1 = tk.Checkbutton(self.check_boxes_frame,
+                             text='Follow Head',
+                             onvalue=1,
+                             offvalue=0,
+                             variable=self.follow_head_var,
+                             command=self.follow_selection)
+        cb1.pack(side=tk.TOP, anchor=tk.W)
+
+        cb2 = tk.Checkbutton(self.check_boxes_frame,
+                             text='Follow Hand',
+                             onvalue=1,
+                             offvalue=0,
+                             variable=self.follow_hand_var,
+                             command=self.follow_selection)
+        cb2.pack(side=tk.TOP, anchor=tk.W)
+
+        self.detection_time_frame = tk.Frame(self.controls_and_info_frame)
+        self.detection_time_frame.pack(side=tk.TOP, anchor=tk.CENTER)
+
+        self.detection_time_label = tk.Label(self.detection_time_frame,
+                                             text="Detection Time:")
+        self.detection_time_label.pack()
+
+        self.timer_label = tk.Label(self.detection_time_frame,
+                                    font="Courier 45 bold",
+                                    text="0",
+                                    height=4,
+                                    width=2,
+                                    bg="#9b9b9b",
+                                    fg="green")
+        self.timer_label.pack()
 
         self.delay = 1
         self.update()
@@ -150,3 +206,22 @@ class GuiApplication:
 
 
         self.window.after(self.delay, self.update)
+
+    def follow_selection(self):
+        """Updates selection values."""
+        print(self.follow_selection)
+
+
+if __name__ == "__main__":
+    from multiprocessing import Queue, Pipe
+    place_holder_1 = Queue()
+    place_holder_2 = Queue()
+    place_holder_3 = Queue()
+    recv_place_holder_4, send_place_holder_4  = Pipe()
+    place_holder_5 = Queue()
+
+    gui = GuiApplication(place_holder_1,
+                         place_holder_2,
+                         place_holder_3,
+                         send_place_holder_4,
+                         place_holder_5)

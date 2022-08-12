@@ -9,7 +9,7 @@ from camera_system.serial_messenger import SerialMessenger
 from camera_system.camera_controller import CameraController
 from camera_system.frame_acquisition import FrameAcquisition
 
-CAMERA_INDEX = 1
+CAMERA_INDEX = 0
 
 def acquirer_worker(frames_queue):
     """Proxy function for creating the frame acquisition process. If a proxy
