@@ -27,11 +27,13 @@ class ProcessManager:
         self.hand_gesture_recognition_process = Process()
         self.head_pose_pipe_connection_process = Process()
         self.serial_communication_process = Process()
-        self.zoom_process = Process()
+        self.hand_command_receiver_process = Process()
 
-        self.recv_connection, self.send_connection = Pipe()
+        self.recv_indicator_coordinates, self.send_indicator_coordinates = Pipe()
+        self.recv_head_position, self.send_head_position = Pipe()
         self.recv_gesture_label, self.send_gesture_label = Pipe()
-        self.recv_zoom_process, self.send_zoom_process = Pipe()
+        self.recv_serial_pipe, self.send_serial_pipe = Pipe()
+        self.recv_command, self.send_command = Pipe()
 
         self._all_queues_ = [self.queue_raw_frame_server_input,
                             self.queue_raw_frame_server_output,
@@ -66,7 +68,7 @@ class ProcessManager:
         self.head_pose_estimation_process = Process(target=head_pose_estimation_target,
                                                     args=(self.queue_head_pose_estimation_input,
                                                           self.queue_head_pose_estimation_output,
-                                                          self.send_connection,))
+                                                          self.send_head_position,))
         self._all_processes_.append(self.head_pose_estimation_process)
 
     def set_hand_gesture_recognition_process(self, hand_gesture_recognition_target):
@@ -76,29 +78,27 @@ class ProcessManager:
                                                     args=(self.queue_hand_gesture_recognition_input,
                                                     self.queue_hand_gesture_recognition_output,
                                                     self.send_gesture_label,
-                                                    self.send_zoom_process,))
+                                                    self.send_command,
+                                                    self.send_indicator_coordinates,))
         self._all_processes_.append(self.hand_gesture_recognition_process)
-
-    def set_head_pose_pipe_connection_process(self, head_pose_pipe_connection_target):
-        """Configures the head pose pipe connection process for manual gesture recognition."""
-
-        self.head_pose_pipe_connection_process = Process(target=head_pose_pipe_connection_target)
-        self._all_processes_.append(self.head_pose_pipe_connection_process)
 
     def set_serial_communication_process(self, serial_communication_target):
         """Configures the serial communication process."""
 
         self.serial_communication_process = Process(target=serial_communication_target,
-                                                    args=(self.recv_connection,))
+                                                    args=(self.recv_serial_pipe,))
         self._all_processes_.append(self.serial_communication_process)
 
-    def set_zoom_process(self, zoom_target):
-        """Configrues the process that applies zoom in and zoom out."""
-        self.zoom_process = Process(target=zoom_target,
-                                    args=(self.queue_processed_frames_input,
-                                    self.queue_processed_frames_output,
-                                    self.recv_zoom_process,))
-        self._all_processes_.append(self.zoom_process)
+    def set_hand_command_receiver_process(self, hand_command_receiver_target):
+        """Configrues the process that receives hand commands."""
+        self.hand_command_receiver_process = Process(target=hand_command_receiver_target,
+                                                     args=(self.queue_processed_frames_input,
+                                                     self.queue_processed_frames_output,
+                                                     self.recv_command,
+                                                     self.recv_head_position,
+                                                     self.send_serial_pipe,
+                                                     self.recv_indicator_coordinates,))
+        self._all_processes_.append(self.hand_command_receiver_process)
 
     def close_all_queues(self):
         """Terminates all frame queues used in processes."""
@@ -115,5 +115,12 @@ class ProcessManager:
 
     def close_all_pipes(self):
         """Closes all pipes."""
-        self.recv_connection.close()
-        self.send_connection.close()
+
+        self.recv_indicator_coordinates.close()
+        self.send_indicator_coordinates.close()
+        self.recv_head_position.close()
+        self.send_head_position.close()
+        self.recv_gesture_label.close()
+        self.send_gesture_label.close()
+        self.recv_command.close()
+        self.send_command.close()

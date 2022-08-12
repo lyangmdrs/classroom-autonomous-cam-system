@@ -16,6 +16,8 @@ from model import KeyPointClassifier
 class FrameProcessing:
     """Class to group frame processing methods."""
 
+    WAIT_TIME = 5
+
     mp_holistic = mp.solutions.holistic
     mp_drawing = mp.solutions.drawing_utils
     mp_drawing_styles = mp.solutions.drawing_styles
@@ -25,13 +27,6 @@ class FrameProcessing:
     initial_time = 0
     last_time = 0
     is_counting = False
-    cropped_width = 1280
-    cropped_height = 720
-    pad_x = 0
-    pad_y = 0
-    zoom_step = 1.05
-    current_zoom = 0
-    maximum_zoom = 2
 
     def __init__(self):
         pass
@@ -102,7 +97,8 @@ class FrameProcessing:
                 queue_output.put(input_frame)
 
     def hand_gesture_recognition(self, queue_input, queue_output,
-                                 pipe_connection, zoom_pipe):
+                                 pipe_connection, command_pipe,
+                                 indicator_pipe):
         """Recognizes hand gestures that eventually appear in frames received
         by the input queue, draws landmakrs and the nose direction vector.
         At the end, it attaches the edited frame to the output queue."""
@@ -110,11 +106,10 @@ class FrameProcessing:
         max_gestures_list_len = 15
         hand_gesture_list = deque(maxlen=max_gestures_list_len)
 
-        hands = self.mp_hands.Hands(
-        model_complexity=0,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5,
-        max_num_hands=1)
+        hands = self.mp_hands.Hands(model_complexity=0,
+                                    min_detection_confidence=0.5,
+                                    min_tracking_confidence=0.5,
+                                    max_num_hands=1)
 
         keypoint_classifier = KeyPointClassifier()
 
@@ -142,7 +137,8 @@ class FrameProcessing:
 
                     cv2.rectangle(input_frame, (bounding_box[0], bounding_box[1]),
                                   (bounding_box[2], bounding_box[3]), (0, 0, 0), 1)
-                    self.draw_hand_landmarks(input_frame,landmark_list)
+
+                    self.draw_hand_landmarks(input_frame, landmark_list)
 
                     pre_processed_landmark_list = self.pre_process_landmarks(landmark_list)
 
@@ -173,13 +169,15 @@ class FrameProcessing:
             if self.initial_time != 0:
                 self.elapsed_time = self.last_time - self.initial_time
 
-            if self.elapsed_time > 5:
-                if self.last_gesture == "Zoom In":
-                    if not zoom_pipe.poll():
-                        zoom_pipe.send(self.last_gesture)
-                elif self.last_gesture == "Zoom Out":
-                    if not zoom_pipe.poll():
-                        zoom_pipe.send(self.last_gesture)
+            if self.elapsed_time > self.WAIT_TIME:
+                if not command_pipe.poll():
+                    if self.last_gesture == "Follow Hand":
+                        indicator_x, indicator_y = landmark_list[8]
+                        cv2.circle(input_frame, (indicator_x, indicator_y), 25, (255, 0, 0), 5)
+                        if not indicator_pipe.poll():
+                            indicator_pipe.send((indicator_x, indicator_y))
+                    command_pipe.send(self.last_gesture)
+
             queue_output.put(input_frame)
 
     def calculate_hand_bounding_box(self, image, landmarks):
@@ -269,7 +267,7 @@ class FrameProcessing:
 
         for index, landmark in enumerate(points):
             if index == 0:
-                cv2.circle(image, (landmark[0], landmark[1]), 5, (255, 255, 255), -1)
+                cv2.circle(image, (landmark[0], landmark[1]), 5, (0, 255, 255), -1)
                 cv2.circle(image, (landmark[0], landmark[1]), 5, (0, 0, 0), 1)
             if index == 1:
                 cv2.circle(image, (landmark[0], landmark[1]), 5, (255, 255, 255), -1)
@@ -357,44 +355,3 @@ class FrameProcessing:
         temp_landmark_list = list(map(normalize_, temp_landmark_list))
 
         return temp_landmark_list
-
-    def apply_zoom(self, queue_input, queue_output, pipe_connection):
-        """Applies zoom in or zoom out to the output frames."""
-
-        while True:
-            command = ""
-            frame = queue_input.get()
-            height, width = frame.shape[:2]
-
-            if pipe_connection.poll():
-                command = pipe_connection.recv()
-
-            current_zoom = 1 / (self.cropped_width / width)
-
-            if command == "Zoom In":
-
-                if current_zoom <= 4:
-                    self.cropped_width = int(self.cropped_width // self.zoom_step)
-                    self.cropped_height = int(self.cropped_height // self.zoom_step)
-
-            elif command == "Zoom Out":
-
-                if current_zoom >= 1:
-                    self.cropped_width = int(self.cropped_width * self.zoom_step)
-                    self.cropped_height = int(self.cropped_height * self.zoom_step)
-
-            self.pad_x = (width - self.cropped_width) // 2
-            self.pad_y = (height - self.cropped_height) // 2
-
-            self.pad_x = max(self.pad_x, 0)
-            self.pad_y = max(self.pad_y, 0)
-
-            frame = frame[self.pad_y:self.pad_y + self.cropped_height,
-                          self.pad_x:self.pad_x + self.cropped_width]
-
-            frame = cv2.resize(frame, (width, height), interpolation=cv2.INTER_CUBIC)
-
-            try:
-                queue_output.put_nowait(frame)
-            except queue.Full:
-                pass
