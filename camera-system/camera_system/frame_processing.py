@@ -16,6 +16,8 @@ from model import KeyPointClassifier
 class FrameProcessing:
     """Class to group frame processing methods."""
 
+    WAIT_TIME = 5
+
     mp_holistic = mp.solutions.holistic
     mp_drawing = mp.solutions.drawing_utils
     mp_drawing_styles = mp.solutions.drawing_styles
@@ -103,11 +105,10 @@ class FrameProcessing:
         max_gestures_list_len = 15
         hand_gesture_list = deque(maxlen=max_gestures_list_len)
 
-        hands = self.mp_hands.Hands(
-        model_complexity=0,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5,
-        max_num_hands=1)
+        hands = self.mp_hands.Hands(model_complexity=0,
+                                    min_detection_confidence=0.5,
+                                    min_tracking_confidence=0.5,
+                                    max_num_hands=1)
 
         keypoint_classifier = KeyPointClassifier()
 
@@ -166,7 +167,7 @@ class FrameProcessing:
             if self.initial_time != 0:
                 self.elapsed_time = self.last_time - self.initial_time
 
-            if self.elapsed_time > 5:
+            if self.elapsed_time > self.WAIT_TIME:
                 if not command_pipe.poll():
                     command_pipe.send(self.last_gesture)
 
