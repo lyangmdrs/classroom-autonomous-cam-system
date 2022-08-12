@@ -97,7 +97,8 @@ class FrameProcessing:
                 queue_output.put(input_frame)
 
     def hand_gesture_recognition(self, queue_input, queue_output,
-                                 pipe_connection, command_pipe):
+                                 pipe_connection, command_pipe,
+                                 indicator_pipe):
         """Recognizes hand gestures that eventually appear in frames received
         by the input queue, draws landmakrs and the nose direction vector.
         At the end, it attaches the edited frame to the output queue."""
@@ -136,7 +137,8 @@ class FrameProcessing:
 
                     cv2.rectangle(input_frame, (bounding_box[0], bounding_box[1]),
                                   (bounding_box[2], bounding_box[3]), (0, 0, 0), 1)
-                    self.draw_hand_landmarks(input_frame,landmark_list)
+
+                    self.draw_hand_landmarks(input_frame, landmark_list)
 
                     pre_processed_landmark_list = self.pre_process_landmarks(landmark_list)
 
@@ -169,6 +171,11 @@ class FrameProcessing:
 
             if self.elapsed_time > self.WAIT_TIME:
                 if not command_pipe.poll():
+                    if self.last_gesture == "Follow Hand":
+                        indicator_x, indicator_y = landmark_list[8]
+                        cv2.circle(input_frame, (indicator_x, indicator_y), 25, (255, 0, 0), 5)
+                        if not indicator_pipe.poll():
+                            indicator_pipe.send((indicator_x, indicator_y))
                     command_pipe.send(self.last_gesture)
 
             queue_output.put(input_frame)
@@ -260,7 +267,7 @@ class FrameProcessing:
 
         for index, landmark in enumerate(points):
             if index == 0:
-                cv2.circle(image, (landmark[0], landmark[1]), 5, (255, 255, 255), -1)
+                cv2.circle(image, (landmark[0], landmark[1]), 5, (0, 255, 255), -1)
                 cv2.circle(image, (landmark[0], landmark[1]), 5, (0, 0, 0), 1)
             if index == 1:
                 cv2.circle(image, (landmark[0], landmark[1]), 5, (255, 255, 255), -1)

@@ -21,25 +21,39 @@ class CameraController:
     block_time = 0
     blocked = False
     position_received = False
+    indicator_coordinates_received = False
 
     def __init__(self):
         pass
 
     def hand_command_receiver(self, queue_input, queue_output, comand_pipe,
-                              head_position_pipe, serial_pipe_connection):
+                              head_position_pipe, serial_pipe_connection,
+                              indicator_pipe):
         """Receives and executes the hand commands."""
 
         while True:
             command = ""
             head_angle = 0
             nose_coordinates = (0, 0)
+            indicator_x = 0
+            indicator_y = 0
 
             if head_position_pipe.poll():
                 self.position_received = True
                 head_angle, nose_coordinates = head_position_pipe.recv()
 
-            if not serial_pipe_connection.poll() and self.follow_head and self.position_received:
-                serial_pipe_connection.send((head_angle, nose_coordinates))
+            if indicator_pipe.poll():
+                indicator_x, indicator_y = indicator_pipe.recv()
+                self.indicator_coordinates_received = True
+
+            if not serial_pipe_connection.poll():
+                if self.follow_head:
+                    if self.position_received:
+                        serial_pipe_connection.send((head_angle, nose_coordinates))
+                elif not self.follow_head and self.indicator_coordinates_received:
+                    self.indicator_coordinates_received = False
+                    serial_pipe_connection.send((0, (indicator_x//5, indicator_y//5)))
+
                 self.position_received = False
 
             if comand_pipe.poll():

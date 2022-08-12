@@ -29,6 +29,7 @@ class ProcessManager:
         self.serial_communication_process = Process()
         self.hand_command_receiver_process = Process()
 
+        self.recv_indicator_coordinates, self.send_indicator_coordinates = Pipe()
         self.recv_head_position, self.send_head_position = Pipe()
         self.recv_gesture_label, self.send_gesture_label = Pipe()
         self.recv_serial_pipe, self.send_serial_pipe = Pipe()
@@ -77,7 +78,8 @@ class ProcessManager:
                                                     args=(self.queue_hand_gesture_recognition_input,
                                                     self.queue_hand_gesture_recognition_output,
                                                     self.send_gesture_label,
-                                                    self.send_command,))
+                                                    self.send_command,
+                                                    self.send_indicator_coordinates,))
         self._all_processes_.append(self.hand_gesture_recognition_process)
 
     def set_serial_communication_process(self, serial_communication_target):
@@ -94,7 +96,8 @@ class ProcessManager:
                                                      self.queue_processed_frames_output,
                                                      self.recv_command,
                                                      self.recv_head_position,
-                                                     self.send_serial_pipe,))
+                                                     self.send_serial_pipe,
+                                                     self.recv_indicator_coordinates,))
         self._all_processes_.append(self.hand_command_receiver_process)
 
     def close_all_queues(self):
@@ -112,6 +115,9 @@ class ProcessManager:
 
     def close_all_pipes(self):
         """Closes all pipes."""
+
+        self.recv_indicator_coordinates.close()
+        self.send_indicator_coordinates.close()
         self.recv_head_position.close()
         self.send_head_position.close()
         self.recv_gesture_label.close()
