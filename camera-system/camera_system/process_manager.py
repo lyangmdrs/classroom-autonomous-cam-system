@@ -31,7 +31,8 @@ class ProcessManager:
 
         self.recv_head_position, self.send_head_position = Pipe()
         self.recv_gesture_label, self.send_gesture_label = Pipe()
-        self.recv_command, self.send_coomand = Pipe()
+        self.recv_serial_pipe, self.send_serial_pipe = Pipe()
+        self.recv_command, self.send_command = Pipe()
 
         self._all_queues_ = [self.queue_raw_frame_server_input,
                             self.queue_raw_frame_server_output,
@@ -76,20 +77,14 @@ class ProcessManager:
                                                     args=(self.queue_hand_gesture_recognition_input,
                                                     self.queue_hand_gesture_recognition_output,
                                                     self.send_gesture_label,
-                                                    self.send_coomand,))
+                                                    self.send_command,))
         self._all_processes_.append(self.hand_gesture_recognition_process)
-
-    def set_head_pose_pipe_connection_process(self, head_pose_pipe_connection_target):
-        """Configures the head pose pipe connection process for manual gesture recognition."""
-
-        self.head_pose_pipe_connection_process = Process(target=head_pose_pipe_connection_target)
-        self._all_processes_.append(self.head_pose_pipe_connection_process)
 
     def set_serial_communication_process(self, serial_communication_target):
         """Configures the serial communication process."""
 
         self.serial_communication_process = Process(target=serial_communication_target,
-                                                    args=(self.recv_head_position,))
+                                                    args=(self.recv_serial_pipe,))
         self._all_processes_.append(self.serial_communication_process)
 
     def set_hand_command_receiver_process(self, hand_command_receiver_target):
@@ -97,7 +92,9 @@ class ProcessManager:
         self.hand_command_receiver_process = Process(target=hand_command_receiver_target,
                                                      args=(self.queue_processed_frames_input,
                                                      self.queue_processed_frames_output,
-                                                     self.recv_command,))
+                                                     self.recv_command,
+                                                     self.recv_head_position,
+                                                     self.send_serial_pipe,))
         self._all_processes_.append(self.hand_command_receiver_process)
 
     def close_all_queues(self):
@@ -120,4 +117,4 @@ class ProcessManager:
         self.recv_gesture_label.close()
         self.send_gesture_label.close()
         self.recv_command.close()
-        self.send_coomand.close()
+        self.send_command.close()
