@@ -118,25 +118,29 @@ class GuiApplication:
         self.check_boxes_frame = tk.Label(self.controls_and_info_frame)
         self.check_boxes_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10)
 
-        self.follow_head_var = tk.IntVar()
-        self.follow_head_var.set(1)
-        self.follow_hand_var = tk.IntVar()
+        self.follow_var = tk.IntVar()
+        self.follow_var.set(1)
 
-        cb1 = tk.Checkbutton(self.check_boxes_frame,
+        rb0 = tk.Radiobutton(self.check_boxes_frame,
+                             text='Stay Still',
+                             value = 0,
+                             variable=self.follow_var,
+                             command=self.follow_selection)
+        rb0.pack(side=tk.TOP, anchor=tk.W)
+        
+        rb1 = tk.Radiobutton(self.check_boxes_frame,
                              text='Follow Head',
-                             onvalue=1,
-                             offvalue=0,
-                             variable=self.follow_head_var,
+                             value = 1,
+                             variable=self.follow_var,
                              command=self.follow_selection)
-        cb1.pack(side=tk.TOP, anchor=tk.W)
+        rb1.pack(side=tk.TOP, anchor=tk.W)
 
-        cb2 = tk.Checkbutton(self.check_boxes_frame,
+        rb2 = tk.Radiobutton(self.check_boxes_frame,
                              text='Follow Hand',
-                             onvalue=1,
-                             offvalue=0,
-                             variable=self.follow_hand_var,
+                             value=2,
+                             variable=self.follow_var,
                              command=self.follow_selection)
-        cb2.pack(side=tk.TOP, anchor=tk.W)
+        rb2.pack(side=tk.TOP, anchor=tk.W)
 
         self.detection_time_frame = tk.Frame(self.controls_and_info_frame)
         self.detection_time_frame.pack(side=tk.LEFT, anchor=tk.NW)
@@ -194,9 +198,6 @@ class GuiApplication:
                                                command=self.com_port_selection)
         self.com_port_dropdown.config(width=17)
         self.com_port_dropdown.pack()
-
-
-
 
         self.delay = 1
         self.update()
@@ -258,11 +259,7 @@ class GuiApplication:
 
     def follow_selection(self):
         """Updates selection values."""
-        if self.follow_head_var.get() == 1:
-            self.follow_hand_var.set(0)
-
-        if self.follow_hand_var.get() == 1:
-            self.follow_head_var.set(0)
+        print("Selection", self.follow_var.get())
 
     def camera_selection(self, selection):
         """Selects the camera index."""
@@ -271,7 +268,6 @@ class GuiApplication:
     def com_port_selection(self, selection):
         """Selects the COM port index."""
         print("Selection:", selection)
-
 
 
 if __name__ == "__main__":
