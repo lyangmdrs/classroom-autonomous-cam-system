@@ -23,10 +23,15 @@ class GuiApplication:
     frame_depth = 3
     hand_gesture_name = ""
 
-    raw_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
-    head_pose_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
-    hand_pose_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
-    processed_frame = np.zeros((frame_width, frame_height, frame_depth), np.uint8)
+    initial_frame = np.reshape(np.repeat(155, frame_height*frame_width*frame_depth),
+                               (frame_height, frame_width, frame_depth))
+
+
+    raw_frame = np.asarray(initial_frame, np.uint8)
+    raw_frame = cv2.putText(raw_frame, "STARTING...", (150, 450), 0, 6,  (8,77,110), 6, 16, False)
+    head_pose_frame = cv2.resize(raw_frame, (frame_width // 5, frame_height // 5), interpolation=3)
+    hand_pose_frame = raw_frame
+    processed_frame = raw_frame
 
     def __init__(self, raw_frame_queue, head_pose_queue,
                  hand_pose_queue, pipe_connection, output_frame_queue):
@@ -105,13 +110,13 @@ class GuiApplication:
         self.gesture_name_label = tk.Label(self.command_frame,
                                            font="Courier 18 bold",
                                            text="",
-                                           width=18,
+                                           width=27,
                                            bg="#9b9b9b",
-                                           fg="green")
+                                           fg="#084d6e")
         self.gesture_name_label.grid(row=0, column=1)
 
         self.check_boxes_frame = tk.Label(self.controls_and_info_frame)
-        self.check_boxes_frame.pack(side=tk.LEFT, fill=tk.Y)
+        self.check_boxes_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10)
 
         self.follow_head_var = tk.IntVar()
         self.follow_head_var.set(1)
@@ -134,7 +139,7 @@ class GuiApplication:
         cb2.pack(side=tk.TOP, anchor=tk.W)
 
         self.detection_time_frame = tk.Frame(self.controls_and_info_frame)
-        self.detection_time_frame.pack(side=tk.TOP, anchor=tk.CENTER)
+        self.detection_time_frame.pack(side=tk.LEFT, anchor=tk.NW)
 
         self.detection_time_label = tk.Label(self.detection_time_frame,
                                              text="Detection Time:")
@@ -143,11 +148,55 @@ class GuiApplication:
         self.timer_label = tk.Label(self.detection_time_frame,
                                     font="Courier 45 bold",
                                     text="0",
-                                    height=4,
+                                    height=1,
                                     width=2,
                                     bg="#9b9b9b",
-                                    fg="green")
+                                    fg="#084d6e")
         self.timer_label.pack()
+
+        self.zoom_indicator_frame = tk.Frame(self.controls_and_info_frame)
+        self.zoom_indicator_frame.pack(side=tk.LEFT, anchor=tk.N, padx=15)
+
+        self.zoom_indicator_label = tk.Label(self.zoom_indicator_frame,
+                                             text="Zoom:")
+        self.zoom_indicator_label.pack()
+
+        self.zoom_label = tk.Label(self.zoom_indicator_frame,
+                                    font="Courier 45 bold",
+                                    text="1x",
+                                    height=1,
+                                    width=2,
+                                    bg="#9b9b9b",
+                                    fg="#084d6e")
+        self.zoom_label.pack()
+
+        self.dropdown_selectors_frame = tk.Frame(self.controls_and_info_frame)
+        self.dropdown_selectors_frame.pack(side=tk.LEFT, anchor=tk.N)
+
+        self.camera = tk.StringVar()
+        self.camera.set("Select Camera")
+        self.cameras_index = ["Cam 1", "Cam 2"]
+
+        self.camera_selector_dropdown = tk.OptionMenu(self.dropdown_selectors_frame,
+                                                      self.camera,
+                                                      *self.cameras_index,
+                                                      command=self.camera_selection)
+        self.camera_selector_dropdown.config(width=17)
+        self.camera_selector_dropdown.pack(pady=17)
+
+        self.com_port = tk.StringVar()
+        self.com_port.set("Select COM Port")
+        self.com_port_index = ["COM 1", "COM 2"]
+
+        self.com_port_dropdown = tk.OptionMenu(self.dropdown_selectors_frame,
+                                               self.com_port,
+                                               *self.com_port_index,
+                                               command=self.com_port_selection)
+        self.com_port_dropdown.config(width=17)
+        self.com_port_dropdown.pack()
+
+
+
 
         self.delay = 1
         self.update()
@@ -209,7 +258,20 @@ class GuiApplication:
 
     def follow_selection(self):
         """Updates selection values."""
-        print(self.follow_selection)
+        if self.follow_head_var.get() == 1:
+            self.follow_hand_var.set(0)
+
+        if self.follow_hand_var.get() == 1:
+            self.follow_head_var.set(0)
+
+    def camera_selection(self, selection):
+        """Selects the camera index."""
+        print("Selection:", selection)
+
+    def com_port_selection(self, selection):
+        """Selects the COM port index."""
+        print("Selection:", selection)
+
 
 
 if __name__ == "__main__":
