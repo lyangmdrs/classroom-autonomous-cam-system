@@ -1,5 +1,6 @@
 """Module that controls the camera."""
 import queue
+import time
 import cv2
 
 
@@ -9,6 +10,7 @@ class CameraController:
     MINIMUM_ZOOM = 1
     MAXIMUM_ZOOM = 5
     ZOOM_STEP = 1.05
+    BLOCK_TIME = 6
 
     follow_head = True
     cropped_width = 1280
@@ -16,6 +18,9 @@ class CameraController:
     pad_x = 0
     pad_y = 0
     current_zoom = 0
+    block_time = 0
+    blocked = False
+    position_received = False
 
     def __init__(self):
         pass
@@ -26,11 +31,16 @@ class CameraController:
 
         while True:
             command = ""
+            head_angle = 0
+            nose_coordinates = (0, 0)
 
-            if head_position_pipe.poll() and self.follow_head:
+            if head_position_pipe.poll():
+                self.position_received = True
                 head_angle, nose_coordinates = head_position_pipe.recv()
-                if not serial_pipe_connection.poll():
-                    serial_pipe_connection.send((head_angle, nose_coordinates))
+
+            if not serial_pipe_connection.poll() and self.follow_head and self.position_received:
+                serial_pipe_connection.send((head_angle, nose_coordinates))
+                self.position_received = False
 
             if comand_pipe.poll():
                 command = comand_pipe.recv()
@@ -41,10 +51,18 @@ class CameraController:
             if command.find("Zoom") != -1:
                 self.set_zoom_parameters(height, width, command)
 
+            if command == "Stop Following" and not self.blocked:
+                self.blocked = True
+                self.block_time = time.time()
+                self.follow_head = not self.follow_head
+
             frame = frame[self.pad_y:self.pad_y + self.cropped_height,
                           self.pad_x:self.pad_x + self.cropped_width]
 
             frame = cv2.resize(frame, (height, width), interpolation=cv2.INTER_CUBIC)
+
+            if self.blocked:
+                self.blocked = (time.time() - self.block_time) < 5
 
             try:
                 queue_output.put_nowait(frame)
