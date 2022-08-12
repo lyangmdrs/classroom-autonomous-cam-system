@@ -10,7 +10,7 @@ class CameraController:
     MINIMUM_ZOOM = 1
     MAXIMUM_ZOOM = 5
     ZOOM_STEP = 1.05
-    BLOCK_TIME = 6
+    BLOCKED_TIME = 6
 
     follow_head = True
     cropped_width = 1280
@@ -62,7 +62,7 @@ class CameraController:
             frame = cv2.resize(frame, (height, width), interpolation=cv2.INTER_CUBIC)
 
             if self.blocked:
-                self.blocked = (time.time() - self.block_time) < 5
+                self.blocked = (time.time() - self.block_time) < self.BLOCKED_TIME
 
             try:
                 queue_output.put_nowait(frame)
