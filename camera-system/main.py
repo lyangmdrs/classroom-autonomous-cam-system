@@ -57,8 +57,10 @@ if __name__ == '__main__':
     gui = GuiApplication(process_manager.queue_raw_frame_server_output,
                          process_manager.queue_head_pose_estimation_output,
                          process_manager.queue_hand_gesture_recognition_output,
+                         process_manager.queue_processed_frames_output,
                          process_manager.recv_gesture_label,
-                         process_manager.queue_processed_frames_output)
+                         process_manager.recv_zoom_gui,
+                         process_manager.recv_gesture_duration)
 
     process_manager.close_all_pipes()
     process_manager.close_all_queues()

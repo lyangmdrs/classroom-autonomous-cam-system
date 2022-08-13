@@ -98,7 +98,7 @@ class FrameProcessing:
 
     def hand_gesture_recognition(self, queue_input, queue_output,
                                  pipe_connection, command_pipe,
-                                 indicator_pipe):
+                                 indicator_pipe, gesture_duration_pipe):
         """Recognizes hand gestures that eventually appear in frames received
         by the input queue, draws landmakrs and the nose direction vector.
         At the end, it attaches the edited frame to the output queue."""
@@ -149,11 +149,14 @@ class FrameProcessing:
                     gesture_label = keypoint_classifier_labels[most_common_gesture[0][0]]
             else:
                 self.last_gesture = ""
+                self.initial_time = 0
+                if not gesture_duration_pipe.poll():
+                    gesture_duration_pipe.send(0)
 
             if not pipe_connection.poll():
                 pipe_connection.send(gesture_label)
 
-            if gesture_label != "":
+            if gesture_label != "" and gesture_label != "Nothing":
                 if gesture_label == self.last_gesture:
                     if not self.is_counting:
                         self.initial_time = time.time()
@@ -165,17 +168,31 @@ class FrameProcessing:
                     self.initial_time = 0
                     self.last_time = 0
                     self.is_counting = False
+                    if not gesture_duration_pipe.poll():
+                        gesture_duration_pipe.send(0)
+            else:
+                self.last_gesture = gesture_label
+                self.initial_time = 0
+                self.last_time = 0
+                self.is_counting = False
+                if not gesture_duration_pipe.poll():
+                    gesture_duration_pipe.send(0)
 
             if self.initial_time != 0:
-                self.elapsed_time = self.last_time - self.initial_time
+                self.elapsed_time = max(self.last_time - self.initial_time, 0)
+                if not gesture_duration_pipe.poll():
+                    gesture_duration_pipe.send(self.elapsed_time)
 
-            if self.elapsed_time > self.WAIT_TIME:
-                if not command_pipe.poll():
-                    if self.last_gesture == "Follow Hand":
-                        indicator_x, indicator_y = landmark_list[8]
-                        cv2.circle(input_frame, (indicator_x, indicator_y), 25, (255, 0, 0), 5)
-                        if not indicator_pipe.poll():
-                            indicator_pipe.send((indicator_x, indicator_y))
+            if not command_pipe.poll():
+                if self.last_gesture == "Follow Hand":
+                    indicator_x, indicator_y = landmark_list[8]
+                    cv2.circle(input_frame, (indicator_x, indicator_y), 25, (255, 0, 0), 5)
+                    if self.elapsed_time > self.WAIT_TIME:
+                        command_pipe.send(self.last_gesture)
+
+                    if not indicator_pipe.poll():
+                        indicator_pipe.send((indicator_x, indicator_y))
+                if self.elapsed_time > self.WAIT_TIME:
                     command_pipe.send(self.last_gesture)
 
             queue_output.put(input_frame)
