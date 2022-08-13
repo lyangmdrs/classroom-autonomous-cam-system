@@ -1,4 +1,5 @@
 """Module that creates a graphic user interface."""
+from time import time
 import tkinter as tk
 import queue
 import numpy as np
@@ -36,7 +37,7 @@ class GuiApplication:
     processed_frame = raw_frame
 
     def __init__(self, raw_frame_queue, head_pose_queue, hand_pose_queue, output_frame_queue,
-                 hand_gesture_pipe, zoom_pipe, gesture_duration_pipe):
+                 hand_gesture_pipe, zoom_pipe, queue_gesture_duration):
         self.window = tk.Tk()
         self.window.title(self.__WINDOW_NAME)
         self.window.geometry(self.__WINDOW_GEOMETRY)
@@ -47,7 +48,7 @@ class GuiApplication:
         self.processed_queue = output_frame_queue
         self.hand_gesture_pipe = hand_gesture_pipe
         self.zoom_pipe = zoom_pipe
-        self.gesture_duration_pipe = gesture_duration_pipe
+        self.queue_gesture_duration = queue_gesture_duration
 
         self.main_viewer_frame = tk.Frame(self.window, height=self.__HEIGHT // 2)
         self.main_viewer_frame.pack(side=tk.TOP, ipady=10, fill=tk.X)
@@ -259,8 +260,8 @@ class GuiApplication:
         self.output_frame = PIL.ImageTk.PhotoImage(image=PIL.Image.fromarray(output_canva_frame))
         self.output_canva.create_image(0, 0, image=self.output_frame, anchor = tk.NW)
 
+        self.update_gesture_duration()
         self.update_zoom_indicator(self.zoom_pipe)
-        self.update_gesture_duration(self.gesture_duration_pipe)
 
         self.window.after(self.delay, self.update)
 
@@ -285,16 +286,18 @@ class GuiApplication:
                 zoom_value = round(zoom_value, 1)
                 self.zoom_label.config(text=str(zoom_value) + "x")
 
-    def update_gesture_duration(self, gesture_duration_pipe):
+    def update_gesture_duration(self):
         """Updates gesture duration indicator on GUI."""
-        if gesture_duration_pipe.poll():
-            gesture_duration = gesture_duration_pipe.recv()
+        try:
+            gesture_duration = self.queue_gesture_duration.get_nowait()
             if gesture_duration >= 0 and gesture_duration <= 5.2:
                 self.timer_label.config(text=str(int(gesture_duration)) + 's')
                 self.timer_label.config(fg="#084d6e")
             elif gesture_duration > 5.2:
                 self.timer_label.config(text=str("OK"))
                 self.timer_label.config(fg="#1a5c45")
+        except queue.Empty:
+            pass
 
 
 
@@ -314,4 +317,4 @@ if __name__ == "__main__":
                          place_holder_5,
                          send_place_holder_4,
                          recv_place_holder_6,
-                         recv_place_holder_7)
+                         place_holder_5)

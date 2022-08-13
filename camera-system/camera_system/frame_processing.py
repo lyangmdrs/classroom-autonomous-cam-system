@@ -98,7 +98,7 @@ class FrameProcessing:
 
     def hand_gesture_recognition(self, queue_input, queue_output,
                                  pipe_connection, command_pipe,
-                                 indicator_pipe, gesture_duration_pipe):
+                                 indicator_pipe, queue_gesture_duration):
         """Recognizes hand gestures that eventually appear in frames received
         by the input queue, draws landmakrs and the nose direction vector.
         At the end, it attaches the edited frame to the output queue."""
@@ -150,8 +150,11 @@ class FrameProcessing:
             else:
                 self.last_gesture = ""
                 self.initial_time = 0
-                if not gesture_duration_pipe.poll():
-                    gesture_duration_pipe.send(0)
+                try:
+                    queue_gesture_duration.put_nowait(0)
+                except queue.Full:
+                    pass
+
 
             if not pipe_connection.poll():
                 pipe_connection.send(gesture_label)
@@ -168,20 +171,26 @@ class FrameProcessing:
                     self.initial_time = 0
                     self.last_time = 0
                     self.is_counting = False
-                    if not gesture_duration_pipe.poll():
-                        gesture_duration_pipe.send(0)
+                    try:
+                        queue_gesture_duration.put_nowait(0)
+                    except queue.Full:
+                        pass
             else:
                 self.last_gesture = gesture_label
                 self.initial_time = 0
                 self.last_time = 0
                 self.is_counting = False
-                if not gesture_duration_pipe.poll():
-                    gesture_duration_pipe.send(0)
+                try:
+                    queue_gesture_duration.put_nowait(0)
+                except queue.Full:
+                    pass
 
             if self.initial_time != 0:
                 self.elapsed_time = max(self.last_time - self.initial_time, 0)
-                if not gesture_duration_pipe.poll():
-                    gesture_duration_pipe.send(self.elapsed_time)
+                try:
+                    queue_gesture_duration.put_nowait(self.elapsed_time)
+                except queue.Full:
+                    pass
 
             if not command_pipe.poll():
                 if self.last_gesture == "Follow Hand":

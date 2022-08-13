@@ -9,7 +9,7 @@ from camera_system.serial_messenger import SerialMessenger
 from camera_system.camera_controller import CameraController
 from camera_system.frame_acquisition import FrameAcquisition
 
-CAMERA_INDEX = 0
+CAMERA_INDEX = 1
 
 def acquirer_worker(frames_queue):
     """Proxy function for creating the frame acquisition process. If a proxy
@@ -60,7 +60,7 @@ if __name__ == '__main__':
                          process_manager.queue_processed_frames_output,
                          process_manager.recv_gesture_label,
                          process_manager.recv_zoom_gui,
-                         process_manager.recv_gesture_duration)
+                         process_manager.queue_gesture_duration)
 
     process_manager.close_all_pipes()
     process_manager.close_all_queues()
