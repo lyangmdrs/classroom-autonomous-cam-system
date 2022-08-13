@@ -187,10 +187,11 @@ class FrameProcessing:
 
             if self.initial_time != 0:
                 self.elapsed_time = max(self.last_time - self.initial_time, 0)
-                try:
-                    queue_gesture_duration.put_nowait(self.elapsed_time)
-                except queue.Full:
-                    pass
+                if gesture_label != "Follow Hand":
+                    try:
+                        queue_gesture_duration.put_nowait(self.elapsed_time)
+                    except queue.Full:
+                        pass
 
             if not command_pipe.poll():
                 if self.last_gesture == "Follow Hand":

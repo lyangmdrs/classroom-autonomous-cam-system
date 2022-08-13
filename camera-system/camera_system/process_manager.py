@@ -107,7 +107,9 @@ class ProcessManager:
                                                      self.recv_head_position,
                                                      self.send_serial_pipe,
                                                      self.recv_indicator_coordinates,
-                                                     self.send_zoom_gui,))
+                                                     self.send_zoom_gui,
+                                                     (self.recv_following_state2,
+                                                     self.send_following_state1),))
         self._all_processes_.append(self.hand_command_receiver_process)
 
     def close_all_queues(self):

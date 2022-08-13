@@ -37,7 +37,7 @@ class GuiApplication:
     processed_frame = raw_frame
 
     def __init__(self, raw_frame_queue, head_pose_queue, hand_pose_queue, output_frame_queue,
-                 hand_gesture_pipe, zoom_pipe, queue_gesture_duration):
+                 hand_gesture_pipe, zoom_pipe, queue_gesture_duration, following_state_pipes):
         self.window = tk.Tk()
         self.window.title(self.__WINDOW_NAME)
         self.window.geometry(self.__WINDOW_GEOMETRY)
@@ -49,6 +49,7 @@ class GuiApplication:
         self.hand_gesture_pipe = hand_gesture_pipe
         self.zoom_pipe = zoom_pipe
         self.queue_gesture_duration = queue_gesture_duration
+        self.recv_folloing_state, self.send_following_state = following_state_pipes
 
         self.main_viewer_frame = tk.Frame(self.window, height=self.__HEIGHT // 2)
         self.main_viewer_frame.pack(side=tk.TOP, ipady=10, fill=tk.X)
@@ -126,13 +127,6 @@ class GuiApplication:
         self.follow_var = tk.IntVar()
         self.follow_var.set(1)
 
-        rb0 = tk.Radiobutton(self.check_boxes_frame,
-                             text='Stay Still',
-                             value = 0,
-                             variable=self.follow_var,
-                             command=self.follow_selection)
-        rb0.pack(side=tk.TOP, anchor=tk.W)
-
         rb1 = tk.Radiobutton(self.check_boxes_frame,
                              text='Follow Head',
                              value = 1,
@@ -142,7 +136,7 @@ class GuiApplication:
 
         rb2 = tk.Radiobutton(self.check_boxes_frame,
                              text='Follow Hand',
-                             value=2,
+                             value=0,
                              variable=self.follow_var,
                              command=self.follow_selection)
         rb2.pack(side=tk.TOP, anchor=tk.W)
@@ -261,13 +255,24 @@ class GuiApplication:
         self.output_canva.create_image(0, 0, image=self.output_frame, anchor = tk.NW)
 
         self.update_gesture_duration()
-        self.update_zoom_indicator(self.zoom_pipe)
+        self.update_zoom_indicator()
+        self.update_folloing_state()
 
         self.window.after(self.delay, self.update)
 
     def follow_selection(self):
-        """Updates selection values."""
-        print("Selection", self.follow_var.get())
+        """Sends following states to camera controller."""
+        if not self.send_following_state.poll():
+            self.send_following_state.send(self.follow_var.get())
+
+    def update_folloing_state(self):
+        """Receives the folloing states from camera controller."""
+        if self.recv_folloing_state.poll():
+            follow_state = self.recv_folloing_state.recv()
+            if follow_state is True:
+                self.follow_var.set(1)
+            elif follow_state is False:
+                self.follow_var.set(0)
 
     def camera_selection(self, selection):
         """Selects the camera index."""
@@ -277,11 +282,11 @@ class GuiApplication:
         """Selects the COM port index."""
         print("Selection:", selection)
 
-    def update_zoom_indicator(self, zoom_pipe):
+    def update_zoom_indicator(self):
         """Updtates zoom indicator on GUI."""
         zoom_value = 0
-        if zoom_pipe.poll():
-            zoom_value = zoom_pipe.recv()
+        if self.zoom_pipe.poll():
+            zoom_value = self.zoom_pipe.recv()
             if zoom_value > 1:
                 zoom_value = round(zoom_value, 1)
                 self.zoom_label.config(text=str(zoom_value) + "x")

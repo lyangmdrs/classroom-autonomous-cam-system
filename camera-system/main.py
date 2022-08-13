@@ -54,13 +54,16 @@ if __name__ == '__main__':
     process_manager.set_hand_command_receiver_process(camera_controller.hand_command_receiver)
     process_manager.hand_command_receiver_process.start()
 
+    following_state_pipes = (process_manager.recv_following_state1,
+                            process_manager.send_following_state2)
     gui = GuiApplication(process_manager.queue_raw_frame_server_output,
                          process_manager.queue_head_pose_estimation_output,
                          process_manager.queue_hand_gesture_recognition_output,
                          process_manager.queue_processed_frames_output,
                          process_manager.recv_gesture_label,
                          process_manager.recv_zoom_gui,
-                         process_manager.queue_gesture_duration)
+                         process_manager.queue_gesture_duration,
+                         following_state_pipes)
 
     process_manager.close_all_pipes()
     process_manager.close_all_queues()

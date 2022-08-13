@@ -30,8 +30,10 @@ class CameraController:
 
     def hand_command_receiver(self, queue_input, queue_output, comand_pipe,
                               head_position_pipe, serial_pipe_connection,
-                              indicator_pipe, zoom_pipe):
+                              indicator_pipe, zoom_pipe, following_state_pipes):
         """Receives and executes the hand commands."""
+
+        recv_following_state, send_following_state = following_state_pipes
 
         while True:
             command = ""
@@ -54,7 +56,7 @@ class CameraController:
                         serial_pipe_connection.send((head_angle, nose_coordinates))
                 elif not self.follow_head and self.indicator_coordinates_received:
                     self.indicator_coordinates_received = False
-                    serial_pipe_connection.send((0, (indicator_x//5, indicator_y//5)))
+                    serial_pipe_connection.send((0, (indicator_x // 5, indicator_y // 5)))
 
                 self.position_received = False
 
@@ -68,10 +70,20 @@ class CameraController:
                 self.set_zoom_parameters(height, width, command)
                 self.send_zoom_value_to_gui(zoom_pipe)
 
+            if recv_following_state.poll():
+                follow_state = recv_following_state.recv()
+                if follow_state == 1:
+                    self.follow_head = True
+                elif follow_state == 0:
+                    self.follow_head = False
+
             if command == "Toggle Following" and not self.blocked:
                 self.blocked = True
                 self.block_time = time.time()
                 self.follow_head = not self.follow_head
+
+            if not send_following_state.poll():
+                send_following_state.send(self.follow_head)
 
             frame = frame[self.pad_y:self.pad_y + self.cropped_height,
                           self.pad_x:self.pad_x + self.cropped_width]
