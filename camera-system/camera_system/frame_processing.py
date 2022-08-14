@@ -86,7 +86,7 @@ class FrameProcessing:
                     point2 = (int(nose_2d[0] + y_coordenate * 10),
                           int(nose_2d[1] - x_coordenate * 10))
 
-                    cv2.line(input_frame, point1, point2, (255, 0, 0), 3)
+                    cv2.line(input_frame, point1, point2, (8, 77, 110), 1)
 
                 self.mp_drawing.draw_landmarks(input_frame,
                                                results.face_landmarks,
@@ -196,7 +196,7 @@ class FrameProcessing:
             if not command_pipe.poll():
                 if self.last_gesture == "Follow Hand":
                     indicator_x, indicator_y = landmark_list[8]
-                    cv2.circle(input_frame, (indicator_x, indicator_y), 25, (255, 0, 0), 5)
+                    cv2.circle(input_frame, (indicator_x, indicator_y), 25, (14, 137, 195), -1)
                     if self.elapsed_time > self.WAIT_TIME:
                         command_pipe.send(self.last_gesture)
 
@@ -294,7 +294,7 @@ class FrameProcessing:
 
         for index, landmark in enumerate(points):
             if index == 0:
-                cv2.circle(image, (landmark[0], landmark[1]), 5, (0, 255, 255), -1)
+                cv2.circle(image, (landmark[0], landmark[1]), 5, (255, 255, 255), -1)
                 cv2.circle(image, (landmark[0], landmark[1]), 5, (0, 0, 0), 1)
             if index == 1:
                 cv2.circle(image, (landmark[0], landmark[1]), 5, (255, 255, 255), -1)
