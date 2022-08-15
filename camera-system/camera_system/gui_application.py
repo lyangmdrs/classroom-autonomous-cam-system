@@ -1,11 +1,11 @@
 """Module that creates a graphic user interface."""
-from time import time
 import tkinter as tk
 import queue
 import numpy as np
 import cv2
 import PIL.Image
 import PIL.ImageTk
+import wmi
 
 class GuiApplication:
     """Class that creates a graphic user interface."""
@@ -36,18 +36,24 @@ class GuiApplication:
     hand_pose_frame = raw_frame
     processed_frame = raw_frame
 
+    enumerator = wmi.WMI()
+
     def __init__(self, raw_frame_queue, head_pose_queue, hand_pose_queue, output_frame_queue,
-                 hand_gesture_pipe, zoom_pipe, queue_gesture_duration, following_state_pipes):
+                 hand_gesture_pipe, zoom_pipe, queue_gesture_duration, following_state_pipes,
+                 cam_index_queue, serial_port_queue):
+
         self.window = tk.Tk()
         self.window.title(self.__WINDOW_NAME)
         self.window.geometry(self.__WINDOW_GEOMETRY)
 
+        self.zoom_pipe = zoom_pipe
         self.raw_frame_queue = raw_frame_queue
         self.head_pose_queue = head_pose_queue
         self.hand_pose_queue = hand_pose_queue
+        self.cam_index_queue = cam_index_queue
         self.processed_queue = output_frame_queue
         self.hand_gesture_pipe = hand_gesture_pipe
-        self.zoom_pipe = zoom_pipe
+        self.serial_port_queue = serial_port_queue
         self.queue_gesture_duration = queue_gesture_duration
         self.recv_folloing_state, self.send_following_state = following_state_pipes
 
@@ -178,7 +184,8 @@ class GuiApplication:
 
         self.camera = tk.StringVar()
         self.camera.set("Select Camera")
-        self.cameras_index = ["Cam 1", "Cam 2"]
+        self.cameras_index = ["Enumerating Cameras"]
+        self.enumerate_cameras()
 
         self.camera_selector_dropdown = tk.OptionMenu(self.dropdown_selectors_frame,
                                                       self.camera,
@@ -189,7 +196,8 @@ class GuiApplication:
 
         self.com_port = tk.StringVar()
         self.com_port.set("Select COM Port")
-        self.com_port_index = ["COM 1", "COM 2"]
+        self.com_port_index = []
+        self.enumerate_serial_devices()
 
         self.com_port_dropdown = tk.OptionMenu(self.dropdown_selectors_frame,
                                                self.com_port,
@@ -226,7 +234,6 @@ class GuiApplication:
         if self.hand_gesture_pipe.poll():
             self.hand_gesture_name = self.hand_gesture_pipe.recv()
             self.gesture_name_label.configure(text=self.hand_gesture_name)
-
 
         input_canva_frame = cv2.resize(self.raw_frame,
                                       (int(self.__FRAME_WIDTH * 0.4),
@@ -276,11 +283,31 @@ class GuiApplication:
 
     def camera_selection(self, selection):
         """Selects the camera index."""
-        print("Selection:", selection)
+        while True:
+            try:
+                self.cam_index_queue.put_nowait(self.cameras_index.index(selection))
+                self.camera_selector_dropdown.config(state=tk.DISABLED)
+                break
+            except queue.Full:
+                pass
 
-    def com_port_selection(self, selection):
+    def com_port_selection(self, selection:str):
         """Selects the COM port index."""
-        print("Selection:", selection)
+        selection = selection.split()
+        for part in selection:
+            if "COM" in part:
+                selection = part.strip("()")
+
+        if ("COM" in selection) is False:
+            return
+
+        while True:
+            try:
+                self.serial_port_queue.put_nowait(selection)
+                self.com_port_dropdown.config(state=tk.DISABLED)
+                break
+            except queue.Full:
+                pass
 
     def update_zoom_indicator(self):
         """Updtates zoom indicator on GUI."""
@@ -304,6 +331,30 @@ class GuiApplication:
         except queue.Empty:
             pass
 
+    def enumerate_cameras(self):
+        """Enumerates the connected cameras."""
+        query = "Select * From Win32_USBControllerDevice"
+        devices = []
+        for device in self.enumerator.query(query):
+            device_class = device.Dependent.PNPClass
+            device_name = device.Dependent.Name
+            if device_class.upper() in ('CAMERA', 'IMAGE'):
+                devices.append(device_name)
+        self.cameras_index = devices
+
+    def enumerate_serial_devices(self):
+        """Enumerates the connected serial devices."""
+        query = "Select * From Win32_USBControllerDevice"
+        devices = []
+        for device in self.enumerator.query(query):
+            device_class = device.Dependent.PNPClass
+            device_name = device.Dependent.Name
+            if device_class.upper() == "PORTS":
+                devices.append(device_name)
+        if len(devices) > 0:
+            self.com_port_index = devices
+        else:
+            self.com_port_index = ["NO DEVICES FOUND"]
 
 
 if __name__ == "__main__":
@@ -315,6 +366,8 @@ if __name__ == "__main__":
     recv_place_holder_4, send_place_holder_4  = Pipe()
     recv_place_holder_6, send_place_holder_6  = Pipe()
     recv_place_holder_7, send_place_holder_7  = Pipe()
+    place_holder_8 = Queue()
+    place_holder_9 = Queue()
 
     gui = GuiApplication(place_holder_1,
                          place_holder_2,
@@ -322,4 +375,8 @@ if __name__ == "__main__":
                          place_holder_5,
                          send_place_holder_4,
                          recv_place_holder_6,
-                         place_holder_5)
+                         place_holder_5,
+                         (recv_place_holder_4,
+                         send_place_holder_6),
+                         place_holder_8,
+                         place_holder_9)

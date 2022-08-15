@@ -22,6 +22,8 @@ class ProcessManager:
         self.queue_processed_frames_output = Queue(queues_size)
 
         self.queue_gesture_duration = Queue(1)
+        self.queue_camera_index = Queue(1)
+        self.queue_serial_port = Queue(1)
 
         self.server_process = Process()
         self.acquirer_process = Process()
@@ -56,7 +58,8 @@ class ProcessManager:
         """Configures the process for acquiring frames."""
 
         self.acquirer_process = Process(target=acquirer_target,
-                                        args=(self.queue_raw_frame_server_input,))
+                                        args=(self.queue_camera_index,
+                                        self.queue_raw_frame_server_input,))
         self._all_processes_.append(self.acquirer_process)
 
     def set_frame_server_process(self, frame_server_target):
@@ -95,7 +98,8 @@ class ProcessManager:
         """Configures the serial communication process."""
 
         self.serial_communication_process = Process(target=serial_communication_target,
-                                                    args=(self.recv_serial_pipe,))
+                                                    args=(self.recv_serial_pipe,
+                                                    self.queue_serial_port))
         self._all_processes_.append(self.serial_communication_process)
 
     def set_hand_command_receiver_process(self, hand_command_receiver_target):

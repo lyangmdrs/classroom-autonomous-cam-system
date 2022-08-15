@@ -1,4 +1,5 @@
 """Module that manages serial communication."""
+import queue
 import time
 import serial
 
@@ -13,12 +14,18 @@ class SerialMessenger:
     X_STEP = 2
     Y_STEP = 3
 
+    __serial_port = ""
+
     def __init__(self, debug=False):
 
         self.debug = debug
+        self.driver = None
+
+    def connect_serial(self):
+        """Connects to a serial port."""
 
         try:
-            self.driver = serial.Serial(port='COM3', baudrate=115200, timeout=.1)
+            self.driver = serial.Serial(port=self.__serial_port, baudrate=115200, timeout=.1)
         except serial.SerialException:
             self.driver = None
         else:
@@ -67,6 +74,19 @@ class SerialMessenger:
             response = None
         return response
 
+    def get_serial_port(self, serial_port_queue):
+        """Gets the COM port index for serial communication."""
+
+        serial_port = ""
+        while True:
+            try:
+                serial_port = serial_port_queue.get()
+                break
+            except queue.Empty:
+                pass
+        self.__serial_port = serial_port
+
+
     def serial_worker(self, pipe_connection):
         """Manages the serial communication."""
 
@@ -74,9 +94,9 @@ class SerialMessenger:
 
             head_angle, nose_coordinates = pipe_connection.recv()
             x_distance = int((self.FRAME_WIDTH * 0.2) // 2 - nose_coordinates[0]) // self.X_STEP
-            # y_distance = int(nose_coordinates[1] - (self.FRAME_HEIGHT * 0.2) // 2) // self.Y_STEP
+            y_distance = int(nose_coordinates[1] - (self.FRAME_HEIGHT * 0.2) // 2) // self.Y_STEP
 
-            command = self.build_command_string(0, x_distance)
+            command = self.build_command_string(y_distance, x_distance)
 
             text = "looking forward"
             if head_angle < -self.HEAD_ANGLE_THRESHOLD:
