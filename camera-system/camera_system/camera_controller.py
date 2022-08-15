@@ -1,15 +1,17 @@
 """Module that controls the camera."""
+
+from multiprocessing import Lock
+
 import queue
 import time
 import cv2
-
 
 class CameraController:
     """Class that controls the camera."""
 
     MINIMUM_ZOOM = 1
     MAXIMUM_ZOOM = 5
-    ZOOM_STEP = 1.05
+    ZOOM_STEP = 1.02
     BLOCKED_TIME = 6
 
     follow_head = True
@@ -17,7 +19,7 @@ class CameraController:
     cropped_height = 720
     pad_x = 0
     pad_y = 0
-    current_zoom = 0
+    current_zoom = 1
     block_time = 0
     blocked = False
     position_received = False
@@ -28,8 +30,10 @@ class CameraController:
 
     def hand_command_receiver(self, queue_input, queue_output, comand_pipe,
                               head_position_pipe, serial_pipe_connection,
-                              indicator_pipe):
+                              indicator_pipe, zoom_pipe, following_state_pipes):
         """Receives and executes the hand commands."""
+
+        recv_following_state, send_following_state = following_state_pipes
 
         while True:
             command = ""
@@ -52,7 +56,7 @@ class CameraController:
                         serial_pipe_connection.send((head_angle, nose_coordinates))
                 elif not self.follow_head and self.indicator_coordinates_received:
                     self.indicator_coordinates_received = False
-                    serial_pipe_connection.send((0, (indicator_x//5, indicator_y//5)))
+                    serial_pipe_connection.send((0, (indicator_x // 5, indicator_y // 5)))
 
                 self.position_received = False
 
@@ -64,11 +68,22 @@ class CameraController:
 
             if command.find("Zoom") != -1:
                 self.set_zoom_parameters(height, width, command)
+                self.send_zoom_value_to_gui(zoom_pipe)
 
-            if command == "Stop Following" and not self.blocked:
+            if recv_following_state.poll():
+                follow_state = recv_following_state.recv()
+                if follow_state == 1:
+                    self.follow_head = True
+                elif follow_state == 0:
+                    self.follow_head = False
+
+            if command == "Toggle Following" and not self.blocked:
                 self.blocked = True
                 self.block_time = time.time()
                 self.follow_head = not self.follow_head
+
+            if not send_following_state.poll():
+                send_following_state.send(self.follow_head)
 
             frame = frame[self.pad_y:self.pad_y + self.cropped_height,
                           self.pad_x:self.pad_x + self.cropped_width]
@@ -86,17 +101,17 @@ class CameraController:
     def set_zoom_parameters(self,  height, width, command):
         """Sets the zoom in or zoom out parameters."""
 
-        current_zoom = 1 / (self.cropped_width / width)
+        self.current_zoom = 1 / (self.cropped_width / width)
 
         if command == "Zoom In":
 
-            if current_zoom <= self.MAXIMUM_ZOOM:
+            if self.current_zoom <= self.MAXIMUM_ZOOM:
                 self.cropped_width = int(self.cropped_width // self.ZOOM_STEP)
                 self.cropped_height = int(self.cropped_height // self.ZOOM_STEP)
 
         elif command == "Zoom Out":
 
-            if current_zoom >= self.MINIMUM_ZOOM:
+            if self.current_zoom >= self.MINIMUM_ZOOM:
                 self.cropped_width = int(self.cropped_width * self.ZOOM_STEP)
                 self.cropped_height = int(self.cropped_height * self.ZOOM_STEP)
 
@@ -105,4 +120,9 @@ class CameraController:
 
         self.pad_x = max(self.pad_x, 0)
         self.pad_y = max(self.pad_y, 0)
- 
+
+    def send_zoom_value_to_gui(self, zoom_pipe):
+        """Sends the current zoom value to the GUI."""
+
+        if not zoom_pipe.poll():
+            zoom_pipe.send(self.current_zoom)

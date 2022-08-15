@@ -86,7 +86,7 @@ class FrameProcessing:
                     point2 = (int(nose_2d[0] + y_coordenate * 10),
                           int(nose_2d[1] - x_coordenate * 10))
 
-                    cv2.line(input_frame, point1, point2, (255, 0, 0), 3)
+                    cv2.line(input_frame, point1, point2, (8, 77, 110), 1)
 
                 self.mp_drawing.draw_landmarks(input_frame,
                                                results.face_landmarks,
@@ -98,7 +98,7 @@ class FrameProcessing:
 
     def hand_gesture_recognition(self, queue_input, queue_output,
                                  pipe_connection, command_pipe,
-                                 indicator_pipe):
+                                 indicator_pipe, queue_gesture_duration):
         """Recognizes hand gestures that eventually appear in frames received
         by the input queue, draws landmakrs and the nose direction vector.
         At the end, it attaches the edited frame to the output queue."""
@@ -149,11 +149,17 @@ class FrameProcessing:
                     gesture_label = keypoint_classifier_labels[most_common_gesture[0][0]]
             else:
                 self.last_gesture = ""
+                self.initial_time = 0
+                try:
+                    queue_gesture_duration.put_nowait(0)
+                except queue.Full:
+                    pass
+
 
             if not pipe_connection.poll():
                 pipe_connection.send(gesture_label)
 
-            if gesture_label != "":
+            if gesture_label != "" and gesture_label != "Nothing":
                 if gesture_label == self.last_gesture:
                     if not self.is_counting:
                         self.initial_time = time.time()
@@ -165,17 +171,38 @@ class FrameProcessing:
                     self.initial_time = 0
                     self.last_time = 0
                     self.is_counting = False
+                    try:
+                        queue_gesture_duration.put_nowait(0)
+                    except queue.Full:
+                        pass
+            else:
+                self.last_gesture = gesture_label
+                self.initial_time = 0
+                self.last_time = 0
+                self.is_counting = False
+                try:
+                    queue_gesture_duration.put_nowait(0)
+                except queue.Full:
+                    pass
 
             if self.initial_time != 0:
-                self.elapsed_time = self.last_time - self.initial_time
+                self.elapsed_time = max(self.last_time - self.initial_time, 0)
+                if gesture_label != "Follow Hand":
+                    try:
+                        queue_gesture_duration.put_nowait(self.elapsed_time)
+                    except queue.Full:
+                        pass
 
-            if self.elapsed_time > self.WAIT_TIME:
-                if not command_pipe.poll():
-                    if self.last_gesture == "Follow Hand":
-                        indicator_x, indicator_y = landmark_list[8]
-                        cv2.circle(input_frame, (indicator_x, indicator_y), 25, (255, 0, 0), 5)
-                        if not indicator_pipe.poll():
-                            indicator_pipe.send((indicator_x, indicator_y))
+            if not command_pipe.poll():
+                if self.last_gesture == "Follow Hand":
+                    indicator_x, indicator_y = landmark_list[8]
+                    cv2.circle(input_frame, (indicator_x, indicator_y), 25, (14, 137, 195), -1)
+                    if self.elapsed_time > self.WAIT_TIME:
+                        command_pipe.send(self.last_gesture)
+
+                    if not indicator_pipe.poll():
+                        indicator_pipe.send((indicator_x, indicator_y))
+                if self.elapsed_time > self.WAIT_TIME:
                     command_pipe.send(self.last_gesture)
 
             queue_output.put(input_frame)
@@ -267,7 +294,7 @@ class FrameProcessing:
 
         for index, landmark in enumerate(points):
             if index == 0:
-                cv2.circle(image, (landmark[0], landmark[1]), 5, (0, 255, 255), -1)
+                cv2.circle(image, (landmark[0], landmark[1]), 5, (255, 255, 255), -1)
                 cv2.circle(image, (landmark[0], landmark[1]), 5, (0, 0, 0), 1)
             if index == 1:
                 cv2.circle(image, (landmark[0], landmark[1]), 5, (255, 255, 255), -1)

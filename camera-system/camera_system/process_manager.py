@@ -21,6 +21,10 @@ class ProcessManager:
         self.queue_processed_frames_input = Queue(queues_size)
         self.queue_processed_frames_output = Queue(queues_size)
 
+        self.queue_gesture_duration = Queue(1)
+        self.queue_camera_index = Queue(1)
+        self.queue_serial_port = Queue(1)
+
         self.server_process = Process()
         self.acquirer_process = Process()
         self.head_pose_estimation_process = Process()
@@ -28,12 +32,17 @@ class ProcessManager:
         self.head_pose_pipe_connection_process = Process()
         self.serial_communication_process = Process()
         self.hand_command_receiver_process = Process()
+        self.update_zoom_gui_inidicator_process = Process()
 
         self.recv_indicator_coordinates, self.send_indicator_coordinates = Pipe()
+        self.recv_following_state1, self.send_following_state1 = Pipe()
+        self.recv_following_state2, self.send_following_state2 = Pipe()
         self.recv_head_position, self.send_head_position = Pipe()
         self.recv_gesture_label, self.send_gesture_label = Pipe()
         self.recv_serial_pipe, self.send_serial_pipe = Pipe()
+        self.recv_zoom_gui, self.send_zoom_gui = Pipe()
         self.recv_command, self.send_command = Pipe()
+
 
         self._all_queues_ = [self.queue_raw_frame_server_input,
                             self.queue_raw_frame_server_output,
@@ -42,13 +51,15 @@ class ProcessManager:
                             self.queue_head_pose_estimation_input,
                             self.queue_head_pose_estimation_output,
                             self.queue_processed_frames_input,
-                            self.queue_processed_frames_output]
+                            self.queue_processed_frames_output,
+                            self.queue_gesture_duration]
 
     def set_acquirer_process(self, acquirer_target):
         """Configures the process for acquiring frames."""
 
         self.acquirer_process = Process(target=acquirer_target,
-                                        args=(self.queue_raw_frame_server_input,))
+                                        args=(self.queue_camera_index,
+                                        self.queue_raw_frame_server_input,))
         self._all_processes_.append(self.acquirer_process)
 
     def set_frame_server_process(self, frame_server_target):
@@ -79,14 +90,16 @@ class ProcessManager:
                                                     self.queue_hand_gesture_recognition_output,
                                                     self.send_gesture_label,
                                                     self.send_command,
-                                                    self.send_indicator_coordinates,))
+                                                    self.send_indicator_coordinates,
+                                                    self.queue_gesture_duration,))
         self._all_processes_.append(self.hand_gesture_recognition_process)
 
     def set_serial_communication_process(self, serial_communication_target):
         """Configures the serial communication process."""
 
         self.serial_communication_process = Process(target=serial_communication_target,
-                                                    args=(self.recv_serial_pipe,))
+                                                    args=(self.recv_serial_pipe,
+                                                    self.queue_serial_port))
         self._all_processes_.append(self.serial_communication_process)
 
     def set_hand_command_receiver_process(self, hand_command_receiver_target):
@@ -97,7 +110,10 @@ class ProcessManager:
                                                      self.recv_command,
                                                      self.recv_head_position,
                                                      self.send_serial_pipe,
-                                                     self.recv_indicator_coordinates,))
+                                                     self.recv_indicator_coordinates,
+                                                     self.send_zoom_gui,
+                                                     (self.recv_following_state2,
+                                                     self.send_following_state1),))
         self._all_processes_.append(self.hand_command_receiver_process)
 
     def close_all_queues(self):
