@@ -10,7 +10,7 @@ import wmi
 class GuiApplication:
     """Class that creates a graphic user interface."""
 
-    __WINDOW_NAME = "Classroom Autonomus Camera System"
+    __WINDOW_NAME = "Classroom Autonomous Camera System"
     __WIDTH = 1040
     __HEIGHT = 510
     __WINDOW_GEOMETRY = str(__WIDTH) + "x" + str(__HEIGHT)
