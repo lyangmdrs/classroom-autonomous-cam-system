@@ -196,7 +196,7 @@ class GuiApplication:
 
         self.com_port = tk.StringVar()
         self.com_port.set("Select COM Port")
-        self.com_port_index = []
+        self.com_port_index = ["Enumerating Ports"]
         self.enumerate_serial_devices()
 
         self.com_port_dropdown = tk.OptionMenu(self.dropdown_selectors_frame,
