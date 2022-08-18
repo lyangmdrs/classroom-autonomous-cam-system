@@ -30,7 +30,7 @@ class CameraController:
 
     def hand_command_receiver(self, queue_input, queue_output, comand_pipe,
                               head_position_pipe, serial_pipe_connection,
-                              indicator_pipe, zoom_pipe, following_state_pipes):
+                              indicator_pipe, zoom_pipe, following_state_pipes, virtual_cam_queue):
         """Receives and executes the hand commands."""
 
         recv_following_state, send_following_state = following_state_pipes
@@ -95,6 +95,10 @@ class CameraController:
 
             try:
                 queue_output.put_nowait(frame)
+            except queue.Full:
+                pass
+            try:
+                virtual_cam_queue.put_nowait(frame)
             except queue.Full:
                 pass
 

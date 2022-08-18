@@ -21,6 +21,8 @@ class ProcessManager:
         self.queue_processed_frames_input = Queue(queues_size)
         self.queue_processed_frames_output = Queue(queues_size)
 
+        self.queue_virtual_camera = Queue(queues_size)
+
         self.queue_gesture_duration = Queue(1)
         self.queue_camera_index = Queue(1)
         self.queue_serial_port = Queue(1)
@@ -33,6 +35,7 @@ class ProcessManager:
         self.serial_communication_process = Process()
         self.hand_command_receiver_process = Process()
         self.update_zoom_gui_inidicator_process = Process()
+        self.virtual_camera_process = Process()
 
         self.recv_indicator_coordinates, self.send_indicator_coordinates = Pipe()
         self.recv_following_state1, self.send_following_state1 = Pipe()
@@ -113,8 +116,15 @@ class ProcessManager:
                                                      self.recv_indicator_coordinates,
                                                      self.send_zoom_gui,
                                                      (self.recv_following_state2,
-                                                     self.send_following_state1),))
+                                                     self.send_following_state1),
+                                                     self.queue_virtual_camera))
         self._all_processes_.append(self.hand_command_receiver_process)
+
+    def set_virtual_camera_process(self, virtual_camera_target):
+        """Configures the process that send frames to virtual camera."""
+        self.virtual_camera_process = Process(target=virtual_camera_target,
+                                              args=(self.queue_virtual_camera,))
+        self._all_processes_.append(self.virtual_camera_process)
 
     def close_all_queues(self):
         """Terminates all frame queues used in processes."""

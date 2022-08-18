@@ -8,7 +8,7 @@ from camera_system.frame_processing import FrameProcessing
 from camera_system.serial_messenger import SerialMessenger
 from camera_system.camera_controller import CameraController
 from camera_system.frame_acquisition import FrameAcquisition
-
+from camera_system.virtual_camera_server import VirtualCamServer
 
 def acquirer_worker(cam_index_queue, frames_queue):
     """Proxy function for creating the frame acquisition process. If a proxy
@@ -37,6 +37,7 @@ if __name__ == '__main__':
     frame_processor = FrameProcessing()
     camera_controller = CameraController()
     frame_server = FrameServer(frame_step=1)
+    virtual_camera = VirtualCamServer()
 
     process_manager.set_serial_communication_process(serial_messeger_worker)
     process_manager.serial_communication_process.start()
@@ -55,6 +56,9 @@ if __name__ == '__main__':
 
     process_manager.set_hand_command_receiver_process(camera_controller.hand_command_receiver)
     process_manager.hand_command_receiver_process.start()
+
+    process_manager.set_virtual_camera_process(virtual_camera.virtual_camera_worker)
+    process_manager.virtual_camera_process.start()
 
     following_state_pipes = (process_manager.recv_following_state1,
                              process_manager.send_following_state2)
