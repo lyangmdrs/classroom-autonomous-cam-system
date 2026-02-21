@@ -1,5 +1,7 @@
 # Classroom Autonomous Cam System
 
+This project was developed as part of my undergraduate thesis for a bachelor's degree in electrical engineering with an emphasis on control and automation at the Federal University of Campina Grande. The text of the work (in Brazilian Portuguese) can be accessed here: [LYANG LEME DE MEDEIROS -MONOGRAFIA-ENGENHARIA ELÉTRICA-CEEI (2022)](https://dspace.sti.ufcg.edu.br/bitstream/riufcg/33232/1/LYANG%20LEME%20DE%20MEDEIROS%20-MONOGRAFIA-ENGENHARIA%20EL%C3%89TRICA-CEEI%20%282022%29.pdf)
+
 ## Pan-Tilt Driver
 
 ### PlatformIO Command Lines
